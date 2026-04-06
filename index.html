@@ -2,110 +2,290 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>BÈO CONTROL PANEL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BÈO CONTROL - LIVE ASSISTANT</title>
     <script src="/socket.io/socket.io.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
     <style>
-        :root { --pink: #fe2c55; --bg: #fff0f3; --panel: #ffffff; }
-        body { font-family: 'Quicksand', sans-serif; background: var(--bg); margin: 0; padding: 15px; display: flex; gap: 15px; height: 100vh; box-sizing: border-box; }
-        
-        /* CỘT TRÁI: NÚT BẤM */
-        .left-col { width: 300px; display: flex; flex-direction: column; gap: 15px; flex-shrink: 0; }
-        .card { background: var(--panel); padding: 20px; border-radius: 20px; border: 2px solid #fff; box-shadow: 0 8px 20px rgba(254, 44, 85, 0.05); }
-        
-        /* CỘT PHẢI: CHAT */
-        .right-col { flex: 1; display: flex; flex-direction: column; background: var(--panel); border-radius: 25px; border: 2px solid #fff; overflow: hidden; padding: 20px; box-shadow: 0 8px 20px rgba(254, 44, 85, 0.05); }
-        #chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column-reverse; }
-        .msg { padding: 12px; border-bottom: 1px solid #fff5f7; font-size: 16px; animation: slide 0.3s ease; }
-        @keyframes slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+        :root { 
+            --pink-main: #fe2c55; 
+            --pink-bg: #fff0f3; 
+            --white: #ffffff;
+            --text: #4a1c2c;
+        }
 
-        /* UI ELEMENTS */
-        input[type="text"] { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ffdae0; outline: none; margin-bottom: 10px; box-sizing: border-box; }
-        button.conn-btn { width: 100%; padding: 12px; background: var(--pink); color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
-        
-        .sw-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f9f9f9; font-size: 14px; font-weight: bold; color: #4a1c2c; }
-        .switch { position: relative; width: 38px; height: 20px; }
+        body { 
+            font-family: 'Quicksand', sans-serif; 
+            background: var(--pink-bg); 
+            margin: 0; padding: 15px; 
+            display: flex; gap: 15px; 
+            height: 100vh; box-sizing: border-box;
+            color: var(--text);
+        }
+
+        /* CỘT TRÁI - ĐIỀU KHIỂN */
+        .left-side {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            flex-shrink: 0;
+        }
+
+        .card {
+            background: var(--white);
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(254, 44, 85, 0.05);
+            border: 2px solid #fff;
+        }
+
+        /* CỘT PHẢI - NỘI DUNG CHAT */
+        .right-side {
+            flex: 1;
+            background: var(--white);
+            border-radius: 25px;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: 0 8px 25px rgba(254, 44, 85, 0.05);
+            border: 2px solid #fff;
+            overflow: hidden;
+        }
+
+        /* INPUT & BUTTON */
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #ffe4e9;
+            outline: none;
+            font-family: inherit;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        .btn-connect {
+            width: 100%;
+            padding: 12px;
+            background: var(--pink-main);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-connect:hover { opacity: 0.9; transform: scale(1.02); }
+
+        /* SWITCH NÚT BẤM */
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #fff5f7;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+        }
+
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ddd; border-radius: 20px; transition: .4s; }
-        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .4s; }
-        input:checked + .slider { background: var(--pink); }
+
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ddd;
+            transition: .4s; border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute; content: "";
+            height: 16px; width: 16px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s; border-radius: 50%;
+        }
+
+        input:checked + .slider { background-color: var(--pink-main); }
         input:checked + .slider:before { transform: translateX(18px); }
 
-        .speed-box { margin-top: 10px; font-size: 12px; }
-        input[type="range"] { width: 100%; accent-color: var(--pink); margin-top: 5px; }
-        .admin-link { display: block; text-align: center; margin-top: 15px; color: var(--pink); text-decoration: none; font-size: 13px; font-weight: bold; }
+        /* KHU VỰC CHAT */
+        #chat-area {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column-reverse; /* Comment mới đẩy lên trên */
+            gap: 10px;
+            padding-right: 5px;
+        }
+
+        .msg-card {
+            padding: 12px 15px;
+            background: #fffafa;
+            border-radius: 15px;
+            border-left: 4px solid var(--pink-main);
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* TỐC ĐỘ ĐỌC */
+        .speed-box {
+            margin-top: 15px;
+            font-size: 13px;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--pink-main);
+            margin-top: 8px;
+        }
+
+        .admin-btn {
+            display: block;
+            text-align: center;
+            margin-top: auto;
+            padding: 10px;
+            color: var(--pink-main);
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 13px;
+            border: 1px dashed var(--pink-main);
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
-    <div class="left-col">
+
+    <div class="left-side">
         <div class="card">
-            <h3 style="margin: 0 0 15px 0; color: var(--pink); text-align: center;">KẾT NỐI LIVE</h3>
-            <input type="text" id="user" placeholder="Nhập ID TikTok...">
-            <button class="conn-btn" onclick="start()">KẾT NỐI NGAY</button>
-            <div id="stt" style="font-size: 11px; text-align: center; margin-top: 8px; color: #888;">Chưa kết nối</div>
+            <h3 style="margin:0 0 15px 0; text-align: center; color: var(--pink-main);">KẾT NỐI LIVE</h3>
+            <input type="text" id="username" placeholder="Nhập ID TikTok...">
+            <button class="btn-connect" onclick="connectLive()">KẾT NỐI</button>
+            <p id="status" style="font-size: 12px; text-align: center; margin: 10px 0 0 0; color: #888;">Trạng thái: Chờ...</p>
         </div>
 
         <div class="card">
-            <h3 style="margin: 0 0 10px 0; font-size: 15px;">ĐIỀU KHIỂN</h3>
-            <div class="sw-item" style="color: blue;"><span>CHỈ NHẮC PK:</span><label class="switch"><input type="checkbox" id="pkOnly"><span class="slider"></span></label></div>
-            <div class="sw-item"><span>Chào khách:</span><label class="switch"><input type="checkbox" id="welcomeToggle" checked><span class="slider"></span></label></div>
-            <div class="sw-item"><span>Đọc Quà:</span><label class="switch"><input type="checkbox" id="giftToggle" checked><span class="slider"></span></label></div>
-            <div class="sw-item"><span>Nhắc PK:</span><label class="switch"><input type="checkbox" id="pkToggle" checked><span class="slider"></span></label></div>
-            <div class="sw-item"><span>Trợ lý:</span><label class="switch"><input type="checkbox" id="botToggle" checked><span class="slider"></span></label></div>
+            <h3 style="margin:0 0 10px 0; font-size: 16px;">CẤU HÌNH ĐỌC</h3>
             
+            <div class="setting-row" style="color: blue;">
+                <span>CHỈ NHẮC PK</span>
+                <label class="switch"><input type="checkbox" id="pkOnlyToggle"><span class="slider"></span></label>
+            </div>
+
+            <div class="setting-row">
+                <span>Chào khách</span>
+                <label class="switch"><input type="checkbox" id="welcomeToggle" checked><span class="slider"></span></label>
+            </div>
+
+            <div class="setting-row">
+                <span>Đọc quà tặng</span>
+                <label class="switch"><input type="checkbox" id="giftToggle" checked><span class="slider"></span></label>
+            </div>
+
+            <div class="setting-row" style="color: #9c27b0;">
+                <span>TRỢ LÝ GEMINI</span>
+                <label class="switch"><input type="checkbox" id="aiToggle" checked><span class="slider"></span></label>
+            </div>
+
             <div class="speed-box">
-                <b>TỐC ĐỘ ĐỌC: <span id="speedVal">1.0</span>x</b>
-                <input type="range" id="speechSpeed" min="0.5" max="2" step="0.1" value="1" oninput="document.getElementById('speedVal').innerText=this.value">
+                <b>Tốc độ đọc: <span id="speedDisplay">1.0</span>x</b>
+                <input type="range" id="speechSpeed" min="0.5" max="2" step="0.1" value="1" oninput="updateSpeed(this.value)">
             </div>
         </div>
 
-        <a href="/admin" target="_blank" class="admin-link">⚙️ CÀI ĐẶT TỪ CẤM / ICON</a>
+        <a href="/admin" target="_blank" class="admin-btn">⚙️ CÀI ĐẶT TỪ CẤM & ICON</a>
     </div>
 
-    <div class="right-col">
-        <h3 style="margin: 0 0 15px 0; color: var(--pink); border-bottom: 2px solid #fff5f7; padding-bottom: 10px;">BÌNH LUẬN TRỰC TIẾP</h3>
-        <div id="chat"></div>
+    <div class="right-side">
+        <h2 style="margin: 0 0 20px 0; font-size: 18px; border-bottom: 2px solid #fff0f3; padding-bottom: 10px;">
+            💬 BÌNH LUẬN TRỰC TIẾP
+        </h2>
+        <div id="chat-area">
+            </div>
     </div>
 
     <script>
         const socket = io();
-        let queue = [], playing = false;
+        let audioQueue = [];
+        let isPlaying = false;
 
-        function start() {
-            const u = document.getElementById('user').value;
-            if(u) socket.emit('set-username', u);
+        function updateSpeed(val) {
+            document.getElementById('speedDisplay').innerText = val;
         }
 
-        socket.on('status', m => document.getElementById('stt').innerText = m);
+        function connectLive() {
+            const user = document.getElementById('username').value;
+            if (user) {
+                socket.emit('set-username', user);
+                document.getElementById('status').innerText = "Đang kết nối...";
+            }
+        }
 
-        socket.on('audio-data', d => {
-            const chat = document.getElementById('chat');
-            const div = document.createElement('div'); div.className = 'msg';
-            div.innerHTML = `<b style="color:var(--pink)">${d.user}:</b> ${d.comment}`;
-            chat.prepend(div);
+        socket.on('status', (msg) => {
+            document.getElementById('status').innerText = "Trạng thái: " + msg;
+        });
 
-            if (d.audio) {
-                const pkOnly = document.getElementById('pkOnly').checked;
+        socket.on('audio-data', (data) => {
+            // Hiển thị lên màn hình chat
+            const chatArea = document.getElementById('chat-area');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'msg-card';
+            msgDiv.innerHTML = `<b style="color:var(--pink-main)">${data.user}:</b> ${data.comment}`;
+            chatArea.prepend(msgDiv);
+
+            // Xử lý âm thanh
+            if (data.audio) {
+                const pkOnly = document.getElementById('pkOnlyToggle').checked;
+                const aiEnabled = document.getElementById('aiToggle').checked;
+
                 if (pkOnly) {
-                    if (d.type === 'pk' && document.getElementById('pkToggle').checked) queue.push(d.audio);
+                    if (data.type === 'pk') audioQueue.push(data.audio);
                 } else {
-                    if (d.type === 'welcome' && !document.getElementById('welcomeToggle').checked) return;
-                    if (d.type === 'gift' && !document.getElementById('giftToggle').checked) return;
-                    if (d.type === 'pk' && !document.getElementById('pkToggle').checked) return;
-                    if (d.type === 'bot' && !document.getElementById('botToggle').checked) return;
-                    queue.push(d.audio);
+                    // Kiểm tra các switch lẻ
+                    if (data.type === 'welcome' && !document.getElementById('welcomeToggle').checked) return;
+                    if (data.type === 'gift' && !document.getElementById('giftToggle').checked) return;
+                    
+                    // Nếu là tin nhắn từ Gemini nhưng switch AI đang tắt thì bỏ qua
+                    if (data.user === "GEMINI AI" && !aiEnabled) return;
+
+                    audioQueue.push(data.audio);
                 }
-                if (!playing) play();
+
+                if (!isPlaying) playNext();
             }
         });
 
-        function play() {
-            if (!queue.length) { playing = false; return; }
-            playing = true;
-            const a = new Audio(queue.shift());
-            a.playbackRate = parseFloat(document.getElementById('speechSpeed').value);
-            a.onended = () => setTimeout(play, 300);
-            a.play().catch(() => play());
+        function playNext() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                return;
+            }
+
+            isPlaying = true;
+            const audio = new Audio(audioQueue.shift());
+            
+            // Áp dụng tốc độ đọc
+            const speed = document.getElementById('speechSpeed').value;
+            audio.playbackRate = parseFloat(speed);
+
+            audio.onended = () => {
+                setTimeout(playNext, 300); // Khoảng nghỉ giữa các câu
+            };
+
+            audio.play().catch(err => {
+                console.log("Audio play error:", err);
+                playNext();
+            });
         }
     </script>
 </body>
