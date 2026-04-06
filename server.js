@@ -13,12 +13,12 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH GEMINI AI (FIX LỖI 404 & VÙNG MIỀN) ---
+// --- CẤU HÌNH GEMINI AI (FIXED FOR RENDER REGION) ---
 const genAI = new GoogleGenerativeAI("AIzaSyB4tu0J3c2LbpsrTH43BtaD9Y_fiMUTHII");
 
 async function askGemini(userName, question) {
     try {
-        // Cấu hình chạy bản v1 ổn định
+        // Ép dùng v1 ổn định
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
         }, { apiVersion: 'v1' }); 
@@ -31,15 +31,15 @@ async function askGemini(userName, question) {
     } catch (e) {
         console.error("LỖI GEMINI CHI TIẾT:", e.message);
         
-        // Xử lý riêng lỗi vùng miền (Location not supported)
+        // Nếu lỗi do Render đặt ở vùng bị cấm (Singapore/EU)
         if (e.message.includes("location") || e.message.includes("supported")) {
-            return "Máy chủ AI đang bảo trì vùng miền, anh hỏi lại sau nhé!";
+            return "Dạ máy chủ AI đang bị chặn vùng miền, anh bảo Tùng Anh đổi Region sang USA trên Render nhé!";
         }
         return "Em đang bận xíu, anh hỏi lại sau nha!";
     }
 }
 
-// --- KẾT NỐI DATABASE ---
+// --- DATABASE ---
 const MONGODB_URI = "mongodb+srv://baoboi97:baoboi97@cluster0.skkajlz.mongodb.net/tiktok_tts?retryWrites=true&w=majority&appName=Cluster0";
 mongoose.connect(MONGODB_URI).then(() => console.log("✅ MongoDB Connected"));
 
@@ -48,7 +48,7 @@ const Acronym = mongoose.model('Acronym', { key: String, value: String });
 const EmojiMap = mongoose.model('EmojiMap', { icon: String, text: String });
 const BotAnswer = mongoose.model('BotAnswer', { keyword: String, response: String });
 
-// --- HÀM XỬ LÝ DỮ LIỆU ---
+// --- HÀM XỬ LÝ ---
 async function isBanned(text) {
     if (!text) return false;
     const banned = await BannedWord.find();
@@ -76,33 +76,28 @@ async function getGoogleAudio(text) {
     } catch (e) { return null; }
 }
 
-// --- GIAO DIỆN ---
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// KHAI BÁO BIẾN TOÀN CỤC (TRÁNH LỖI REFERENCE ERROR KHI SẬP SERVER)
+// BIẾN TOÀN CỤC TRÁNH LỖI KHI BẤM START
 let tiktok = null;
 let pkTimer = null;
 
 io.on('connection', (socket) => {
     socket.on('set-username', (username) => {
-        // Ngắt kết nối cũ nếu có trước khi nối mới
         if (tiktok) {
             tiktok.disconnect();
             if (pkTimer) clearInterval(pkTimer);
         }
 
         tiktok = new WebcastPushConnection(username);
-        
         tiktok.connect()
             .then(() => socket.emit('status', `✅ Đã nối: ${username}`))
-            .catch(err => socket.emit('status', `❌ Lỗi nối: ${err.message}`));
+            .catch(err => socket.emit('status', `❌ Lỗi: ${err.message}`));
 
-        // Xử lý Chat
         tiktok.on('chat', async (data) => {
             if (await isBanned(data.nickname)) return;
             const commentLower = data.comment.toLowerCase();
 
-            // 1. Check kịch bản cứng
             const botRules = await BotAnswer.find();
             const match = botRules.find(r => commentLower.includes(r.keyword));
 
@@ -110,13 +105,11 @@ io.on('connection', (socket) => {
                 const audio = await getGoogleAudio(`Anh ${data.nickname} ơi, ${match.response}`);
                 socket.emit('audio-data', { type: 'bot', user: "TRỢ LÝ", comment: match.response, audio });
             } 
-            // 2. Check gọi Trợ lý AI (Gemini)
             else if (commentLower.includes("bot ơi") || commentLower.includes("bèo ơi")) {
                 const aiReply = await askGemini(data.nickname, data.comment);
                 const audio = await getGoogleAudio(aiReply);
                 socket.emit('audio-data', { type: 'bot', user: "GEMINI AI", comment: aiReply, audio });
             }
-            // 3. Đọc cmt bình thường
             else {
                 const final = await processText(data.comment);
                 if (final) {
@@ -126,7 +119,6 @@ io.on('connection', (socket) => {
             }
         });
 
-        // Xử lý PK
         tiktok.on('linkMicBattle', () => {
             if (pkTimer) clearInterval(pkTimer);
             let timeLeft = 300;
@@ -140,7 +132,6 @@ io.on('connection', (socket) => {
             }, 1000);
         });
 
-        // Chào khách & Tặng quà
         tiktok.on('member', async (data) => {
             if (!(await isBanned(data.nickname))) {
                 const safeName = await processText(data.nickname);
@@ -160,4 +151,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`🚀 Server đang chạy trên port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
