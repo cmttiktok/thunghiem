@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>BÈO ADMIN - CẤU HÌNH</title>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Quicksand', sans-serif; background: #fff0f3; padding: 20px; }
+        .admin-card { max-width: 600px; margin: auto; background: white; padding: 25px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; }
+        .tab-btn { flex: 1; padding: 10px; border-radius: 12px; cursor: pointer; border: 1px solid #ffdae0; font-weight: bold; background: #fff; white-space: nowrap; font-size: 12px; }
+        .tab-active { background: #fe2c55; color: white; border-color: #fe2c55; }
+        .list-box { height: 350px; overflow-y: auto; border: 1px solid #f9f9f9; padding: 10px; border-radius: 15px; background: #fafafa; margin-top: 10px; }
+        input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 12px; border: 1px solid #eee; box-sizing: border-box; outline: none; }
+        button.add-btn { width: 100%; padding: 12px; background: #333; color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; }
+        .item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .del-btn { color: #fe2c55; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="admin-card">
+        <h3 style="text-align:center; color:#fe2c55; margin-top:0;">⚙️ QUẢN LÝ DỮ LIỆU</h3>
+        <div class="tabs">
+            <div class="tab-btn tab-active" id="btn-ban" onclick="switchTab('ban')">TỪ CẤM</div>
+            <div class="tab-btn" id="btn-acr" onclick="switchTab('acr')">VIẾT TẮT</div>
+            <div class="tab-btn" id="btn-emo" onclick="switchTab('emo')">ICON</div>
+            <div class="tab-btn" id="btn-bot" onclick="switchTab('bot')">TRỢ LÝ</div>
+        </div>
+
+        <div id="tab-ban-ui">
+            <input type="text" id="new-word" placeholder="Nhập từ muốn chặn...">
+            <button class="add-btn" onclick="addWord()">LƯU TỪ CẤM</button>
+            <div class="list-box" id="word-list"></div>
+        </div>
+
+        <div id="tab-acr-ui" style="display:none;">
+            <input type="text" id="acr-key" placeholder="Viết tắt (vd: k)">
+            <input type="text" id="acr-val" placeholder="Dịch ra (vd: không)">
+            <button class="add-btn" onclick="addAcr()">LƯU VIẾT TẮT</button>
+            <div class="list-box" id="acr-list"></div>
+        </div>
+
+        <div id="tab-emo-ui" style="display:none;">
+            <input type="text" id="emo-icon" placeholder="Icon (Emoji)">
+            <input type="text" id="emo-text" placeholder="Cách đọc icon">
+            <button class="add-btn" onclick="addEmo()">LƯU ICON</button>
+            <div class="list-box" id="emo-list"></div>
+        </div>
+
+        <div id="tab-bot-ui" style="display:none;">
+            <input type="text" id="bot-key" placeholder="Câu khách hỏi...">
+            <input type="text" id="bot-res" placeholder="Câu trả lời...">
+            <button class="add-btn" onclick="addBot()">THÊM KỊCH BẢN</button>
+            <div class="list-box" id="bot-list"></div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(t) {
+            ['ban','acr','emo','bot'].forEach(tab => {
+                document.getElementById(`tab-${tab}-ui`).style.display = tab === t ? 'block' : 'none';
+                document.getElementById(`btn-${tab}`).classList.toggle('tab-active', tab === t);
+            });
+        }
+        async function loadData() {
+            const words = await (await fetch('/api/words')).json();
+            document.getElementById('word-list').innerHTML = words.map(w => `<div class="item"><span>${w}</span><span class="del-btn" onclick="delWord('${w}')">XOÁ</span></div>`).join('');
+            const acrs = await (await fetch('/api/acronyms')).json();
+            document.getElementById('acr-list').innerHTML = acrs.map(a => `<div class="item"><span>${a.key} ➜ ${a.value}</span><span class="del-btn" onclick="delAcr('${a.key}')">XOÁ</span></div>`).join('');
+            const emos = await (await fetch('/api/emojis')).json();
+            document.getElementById('emo-list').innerHTML = emos.map(e => `<div class="item"><span>${e.icon} ➜ ${e.text}</span><span class="del-btn" onclick="delEmo('${e._id}')">XOÁ</span></div>`).join('');
+            const bots = await (await fetch('/api/bot')).json();
+            document.getElementById('bot-list').innerHTML = bots.map(b => `<div class="item"><span>${b.keyword}</span><span class="del-btn" onclick="delBot('${b._id}')">XOÁ</span></div>`).join('');
+        }
+        // Các hàm API giữ nguyên 100% logic cũ của bạn
+        async function addWord() { await fetch('/api/words', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({word: document.getElementById('new-word').value}) }); document.getElementById('new-word').value=''; loadData(); }
+        async function delWord(w) { await fetch(`/api/words/${encodeURIComponent(w)}`, { method: 'DELETE' }); loadData(); }
+        async function addAcr() { await fetch('/api/acronyms', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key: document.getElementById('acr-key').value, value: document.getElementById('acr-val').value}) }); document.getElementById('acr-key').value=''; document.getElementById('acr-val').value=''; loadData(); }
+        async function delAcr(k) { await fetch(`/api/acronyms/${encodeURIComponent(k)}`, { method: 'DELETE' }); loadData(); }
+        async function addEmo() { await fetch('/api/emojis', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({icon: document.getElementById('emo-icon').value, text: document.getElementById('emo-text').value}) }); document.getElementById('emo-icon').value=''; document.getElementById('emo-text').value=''; loadData(); }
+        async function delEmo(id) { await fetch(`/api/emojis/${id}`, { method: 'DELETE' }); loadData(); }
+        async function addBot() { await fetch('/api/bot', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({keyword: document.getElementById('bot-key').value, response: document.getElementById('bot-res').value}) }); document.getElementById('bot-key').value=''; document.getElementById('bot-res').value=''; loadData(); }
+        async function delBot(id) { await fetch(`/api/bot/${id}`, { method: 'DELETE' }); loadData(); }
+        loadData();
+    </script>
+</body>
+</html>
