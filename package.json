@@ -1,6 +1,6 @@
 {
   "name": "tiktok-tts-idol-beo",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "main": "server.js",
   "dependencies": {
     "express": "^4.18.2",
