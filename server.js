@@ -13,42 +13,35 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH GEMINI AI (BẢN FIX TRIỆT ĐỂ VÙNG MIỀN) ---
-const API_KEY = "AIzaSyB4tu0J3c2LbpsrTH43BtaD9Y_fiMUTHII";
+// --- CẤU HÌNH GEMINI AI (ĐÃ GẮN KEY MỚI CỦA TÙNG ANH) ---
+const API_KEY = "AIzaSyBmx-XHU_fBySeZw74O2BLFT_UBPWRJHk8";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 async function askGemini(userName, question) {
     try {
-        // Cách gọi mới: Ép sử dụng v1 và cấu hình trực tiếp để tránh lỗi Region
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
-        }, { apiVersion: 'v1' }); 
+        // Sử dụng model flash bản ổn định nhất
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); 
 
-        const prompt = `Bạn là trợ lý ảo của Idol TikTok Chi Bèo. Trả lời cực ngắn dưới 15 từ. ${userName} hỏi: ${question}`;
+        const prompt = `Bạn là trợ lý ảo của Idol TikTok Chi Bèo. Trả lời thật ngắn gọn, hài hước dưới 15 từ. Người dùng ${userName} hỏi: ${question}`;
         
-        // Sử dụng phương thức gọi an toàn
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        const text = response.text();
-        return text;
+        return response.text();
     } catch (e) {
-        console.error("LỖI CHI TIẾT ĐÂY TÙNG ANH:", e.message);
+        console.error("LỖI AI:", e.message);
         
-        // Nếu vẫn lỗi vùng miền, dùng bộ câu trả lời ngẫu nhiên để khách không biết là lỗi
-        if (e.message.includes("location") || e.message.includes("supported")) {
-            const backupReplies = [
-                "Dạ em nghe đây, anh nhắn gì thế ạ?",
-                "Hì hì, anh hỏi khó quá em chưa nghĩ ra.",
-                "Chào anh nhé, chúc anh xem live vui vẻ!",
-                "Em đây, em đây! Anh gọi Chi Bèo có việc gì không?"
-            ];
-            return backupReplies[Math.floor(Math.random() * backupReplies.length)];
-        }
-        return "Em đang bận xíu, anh hỏi lại sau nha!";
+        // Bộ câu trả lời dự phòng nếu mạng lag hoặc lỗi vùng miền
+        const backupReplies = [
+            "Dạ em nghe đây, anh nhắn gì thế ạ?",
+            "Hì hì, anh hỏi khó quá em chưa nghĩ ra.",
+            "Chào anh nhé, chúc anh xem live vui vẻ!",
+            "Em đây, em đây! Anh gọi em có việc gì không?"
+        ];
+        return backupReplies[Math.floor(Math.random() * backupReplies.length)];
     }
 }
 
-// --- DATABASE ---
+// --- KẾT NỐI DATABASE (DỮ LIỆU CỦA BAOBOI97) ---
 const MONGODB_URI = "mongodb+srv://baoboi97:baoboi97@cluster0.skkajlz.mongodb.net/tiktok_tts?retryWrites=true&w=majority&appName=Cluster0";
 mongoose.connect(MONGODB_URI).then(() => console.log("✅ MongoDB Connected"));
 
@@ -57,7 +50,7 @@ const Acronym = mongoose.model('Acronym', { key: String, value: String });
 const EmojiMap = mongoose.model('EmojiMap', { icon: String, text: String });
 const BotAnswer = mongoose.model('BotAnswer', { keyword: String, response: String });
 
-// --- HÀM XỬ LÝ (GIỮ NGUYÊN) ---
+// --- CÁC HÀM XỬ LÝ TEXT ---
 async function isBanned(text) {
     if (!text) return false;
     const banned = await BannedWord.find();
@@ -85,8 +78,10 @@ async function getGoogleAudio(text) {
     } catch (e) { return null; }
 }
 
+// --- GIAO DIỆN CHÍNH ---
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
+// BIẾN TOÀN CỤC ĐỂ QUẢN LÝ KẾT NỐI
 let tiktok = null;
 let pkTimer = null;
 
@@ -98,14 +93,17 @@ io.on('connection', (socket) => {
         }
 
         tiktok = new WebcastPushConnection(username);
+        
         tiktok.connect()
             .then(() => socket.emit('status', `✅ Đã nối: ${username}`))
             .catch(err => socket.emit('status', `❌ Lỗi: ${err.message}`));
 
+        // XỬ LÝ KHI CÓ CHAT
         tiktok.on('chat', async (data) => {
             if (await isBanned(data.nickname)) return;
             const commentLower = data.comment.toLowerCase();
 
+            // 1. Kiểm tra kịch bản có sẵn trong DB
             const botRules = await BotAnswer.find();
             const match = botRules.find(r => commentLower.includes(r.keyword));
 
@@ -113,11 +111,13 @@ io.on('connection', (socket) => {
                 const audio = await getGoogleAudio(`Anh ${data.nickname} ơi, ${match.response}`);
                 socket.emit('audio-data', { type: 'bot', user: "TRỢ LÝ", comment: match.response, audio });
             } 
+            // 2. Gọi Gemini AI khi có từ khóa "bot ơi" hoặc "bèo ơi"
             else if (commentLower.includes("bot ơi") || commentLower.includes("bèo ơi")) {
                 const aiReply = await askGemini(data.nickname, data.comment);
                 const audio = await getGoogleAudio(aiReply);
                 socket.emit('audio-data', { type: 'bot', user: "GEMINI AI", comment: aiReply, audio });
             }
+            // 3. Đọc comment bình thường
             else {
                 const final = await processText(data.comment);
                 if (final) {
@@ -127,10 +127,10 @@ io.on('connection', (socket) => {
             }
         });
 
-        // PK & Quà (Giữ nguyên)
+        // XỬ LÝ NHẮC PK 20S CUỐI
         tiktok.on('linkMicBattle', () => {
             if (pkTimer) clearInterval(pkTimer);
-            let timeLeft = 300;
+            let timeLeft = 300; // 5 phút PK
             pkTimer = setInterval(async () => {
                 timeLeft--;
                 if (timeLeft === 20) {
@@ -141,6 +141,7 @@ io.on('connection', (socket) => {
             }, 1000);
         });
 
+        // CHÀO THÀNH VIÊN VÀO XEM
         tiktok.on('member', async (data) => {
             if (!(await isBanned(data.nickname))) {
                 const safeName = await processText(data.nickname);
@@ -149,6 +150,7 @@ io.on('connection', (socket) => {
             }
         });
 
+        // CẢM ƠN QUÀ TẶNG
         tiktok.on('gift', async (data) => {
             if (data.repeatEnd && !(await isBanned(data.nickname))) {
                 const safeName = await processText(data.nickname);
@@ -160,4 +162,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server đang chạy tại port ${PORT}`));
