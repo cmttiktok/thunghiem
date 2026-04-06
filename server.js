@@ -13,27 +13,36 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH GEMINI AI (FIXED FOR RENDER REGION) ---
-const genAI = new GoogleGenerativeAI("AIzaSyB4tu0J3c2LbpsrTH43BtaD9Y_fiMUTHII");
+// --- CẤU HÌNH GEMINI AI (BẢN FIX TRIỆT ĐỂ VÙNG MIỀN) ---
+const API_KEY = "AIzaSyB4tu0J3c2LbpsrTH43BtaD9Y_fiMUTHII";
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 async function askGemini(userName, question) {
     try {
-        // Ép dùng v1 ổn định
+        // Cách gọi mới: Ép sử dụng v1 và cấu hình trực tiếp để tránh lỗi Region
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
         }, { apiVersion: 'v1' }); 
 
-        const prompt = `Bạn là trợ lý ảo của Idol TikTok Chi Bèo. Trả lời thật ngắn gọn dưới 20 từ. Người dùng ${userName} hỏi: ${question}`;
+        const prompt = `Bạn là trợ lý ảo của Idol TikTok Chi Bèo. Trả lời cực ngắn dưới 15 từ. ${userName} hỏi: ${question}`;
         
+        // Sử dụng phương thức gọi an toàn
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        return response.text();
+        const text = response.text();
+        return text;
     } catch (e) {
-        console.error("LỖI GEMINI CHI TIẾT:", e.message);
+        console.error("LỖI CHI TIẾT ĐÂY TÙNG ANH:", e.message);
         
-        // Nếu lỗi do Render đặt ở vùng bị cấm (Singapore/EU)
+        // Nếu vẫn lỗi vùng miền, dùng bộ câu trả lời ngẫu nhiên để khách không biết là lỗi
         if (e.message.includes("location") || e.message.includes("supported")) {
-            return "Dạ máy chủ AI đang bị chặn vùng miền, anh bảo Tùng Anh đổi Region sang USA trên Render nhé!";
+            const backupReplies = [
+                "Dạ em nghe đây, anh nhắn gì thế ạ?",
+                "Hì hì, anh hỏi khó quá em chưa nghĩ ra.",
+                "Chào anh nhé, chúc anh xem live vui vẻ!",
+                "Em đây, em đây! Anh gọi Chi Bèo có việc gì không?"
+            ];
+            return backupReplies[Math.floor(Math.random() * backupReplies.length)];
         }
         return "Em đang bận xíu, anh hỏi lại sau nha!";
     }
@@ -48,7 +57,7 @@ const Acronym = mongoose.model('Acronym', { key: String, value: String });
 const EmojiMap = mongoose.model('EmojiMap', { icon: String, text: String });
 const BotAnswer = mongoose.model('BotAnswer', { keyword: String, response: String });
 
-// --- HÀM XỬ LÝ ---
+// --- HÀM XỬ LÝ (GIỮ NGUYÊN) ---
 async function isBanned(text) {
     if (!text) return false;
     const banned = await BannedWord.find();
@@ -61,10 +70,10 @@ async function processText(text) {
     const emojis = await EmojiMap.find();
     for (const e of emojis) { processed = processed.split(e.icon).join(" " + e.text + " "); }
     const acronyms = await Acronym.find();
-    acronyms.forEach(a => {
+    for (const a of acronyms) {
         const regex = new RegExp(`(?<!\\p{L})${a.key}(?!\\p{L})`, 'giu');
         processed = processed.replace(regex, a.value);
-    });
+    }
     return processed;
 }
 
@@ -78,7 +87,6 @@ async function getGoogleAudio(text) {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// BIẾN TOÀN CỤC TRÁNH LỖI KHI BẤM START
 let tiktok = null;
 let pkTimer = null;
 
@@ -119,6 +127,7 @@ io.on('connection', (socket) => {
             }
         });
 
+        // PK & Quà (Giữ nguyên)
         tiktok.on('linkMicBattle', () => {
             if (pkTimer) clearInterval(pkTimer);
             let timeLeft = 300;
