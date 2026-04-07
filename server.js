@@ -12,25 +12,30 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH AI (LẤY TỪ ENVIRONMENT VARIABLE) ---
+// --- CẤU HÌNH AI (MODEL ỔN ĐỊNH NHẤT) ---
 const HF_TOKEN = process.env.HF_TOKEN; 
-const AI_MODEL = "facebook/blenderbot-400M-distill"; // Model này cực nhẹ và nhanh
+// Đổi sang model chuyên chat, cực kỳ ổn định
+const AI_MODEL = "HuggingFaceH4/zephyr-7b-beta"; 
 
 async function askAI(userName, question) {
-    if (!HF_TOKEN) return `Chào ${userName}, mình đang khởi động, đợi tí nha!`;
+    if (!HF_TOKEN) return `Chào ${userName}, em nghe đây ạ!`;
     
     try {
         const response = await axios.post(
             `https://api-inference.huggingface.co/models/${AI_MODEL}`,
-            { inputs: `Chat với ${userName}: ${question}` },
-            { headers: { Authorization: `Bearer ${HF_TOKEN}` }, timeout: 5000 }
+            { 
+                inputs: `<|system|>\nBạn là trợ lý ảo của Chi Bèo. Trả lời cực ngắn dưới 15 từ.</s>\n<|user|>\n${userName} hỏi: ${question}</s>\n<|assistant|>\n`,
+                parameters: { max_new_tokens: 50, temperature: 0.7 }
+            },
+            { headers: { Authorization: `Bearer ${HF_TOKEN}` }, timeout: 8000 }
         );
         
-        // Trả về câu trả lời từ AI
-        return response.data.generated_text || response.data[0].generated_text;
+        let reply = response.data[0].generated_text.split("<|assistant|>\n")[1] || "Em nghe đây ạ!";
+        return reply.trim();
     } catch (e) {
         console.error("LỖI AI:", e.message);
-        return `Chào ${userName}, em nghe đây ạ!`;
+        // Trả về câu khác để bạn biết là đang bị lỗi kết nối
+        return `Dạ ${userName}, em đang suy nghĩ một chút, anh đợi em tí nhé!`;
     }
 }
 
@@ -59,7 +64,6 @@ io.on('connection', (socket) => {
         tiktok.connect().then(() => socket.emit('status', `✅ Đã nối: ${username}`));
 
         tiktok.on('chat', async (data) => {
-            // Hiển thị comment lên web ngay lập tức
             socket.emit('chat-message', data); 
 
             const commentLower = data.comment.toLowerCase();
@@ -67,7 +71,7 @@ io.on('connection', (socket) => {
             const match = botRules.find(r => commentLower.includes(r.keyword.toLowerCase()));
 
             if (match) {
-                const audio = await getGoogleAudio(`Anh ${data.nickname} ơi, ${match.response}`);
+                const audio = await getGoogleAudio(`${match.response}`);
                 socket.emit('audio-data', { type: 'bot', user: "TRỢ LÝ", comment: match.response, audio });
             } 
             else if (commentLower.includes("bot ơi") || commentLower.includes("bèo ơi")) {
