@@ -2,61 +2,64 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Chị Google AI - Fix CORS</title>
+    <title>Chị Google AI - Final Fix</title>
     <style>
-        body { margin: 0; background: #0f1020; color: #fff; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); padding: 40px; border-radius: 25px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; width: 340px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-        input { width: 90%; padding: 15px; margin: 20px 0; border-radius: 12px; border: 1px solid #333; background: #1a1b2e; color: #fff; text-align: center; font-size: 16px; outline: none; }
-        button { background: linear-gradient(45deg, #00d2ff, #3a7bd5); color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; box-shadow: 0 5px 15px rgba(0,210,255,0.3); }
+        body { margin: 0; background: #0b0e14; color: #fff; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); padding: 40px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        input { width: 90%; padding: 15px; margin: 20px 0; border-radius: 15px; border: 1px solid #333; background: #161b22; color: #fff; text-align: center; font-size: 16px; outline: none; }
+        button { background: linear-gradient(45deg, #00f2fe, #4facfe); color: white; border: none; padding: 15px; border-radius: 15px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
+        button:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(79, 172, 254, 0.5); }
         #status { margin-top: 20px; color: #00ffcc; font-weight: bold; }
-        #log { margin-top: 10px; font-size: 0.85em; color: #888; }
+        #log { margin-top: 10px; font-size: 0.85em; color: #777; min-height: 20px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>CHỊ GOOGLE AI</h2>
-    <input type="text" id="tiktokId" placeholder="Nhập ID TikTok...">
-    <button onclick="startSystem()">KẾT NỐI LIVE</button>
+    <h2 style="margin-bottom:10px">CHỊ GOOGLE AI</h2>
+    <p style="font-size: 0.8em; color: #aaa;">Bản vá lỗi CORS & Âm thanh</p>
+    <input type="text" id="tiktokId" placeholder="ID TikTok (ví dụ: catne_0797)">
+    <button onclick="activateSystem()">KẾT NỐI & BẬT LOA</button>
     <div id="status">Chưa kết nối</div>
-    <div id="log">Sẵn sàng...</div>
+    <div id="log">Vui lòng bấm nút xanh...</div>
 </div>
-
-<audio id="googleAudio" style="display:none"></audio>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
     const socket = io();
-    const audioPlayer = document.getElementById('googleAudio');
-    let isActivated = false;
+    let audioReady = false;
 
-    function startSystem() {
+    function activateSystem() {
         const id = document.getElementById('tiktokId').value;
-        if(!id) return alert("Thiếu ID TikTok!");
+        if(!id) return alert("Bạn chưa nhập ID TikTok!");
         
-        isActivated = true;
+        audioReady = true;
         socket.emit('set-id', id);
         document.getElementById('status').innerText = "Đang kết nối...";
+        document.getElementById('log').innerText = "Hệ thống đã sẵn sàng phát âm thanh.";
         
-        // Phát một tiếng "ting" nhẹ để trình duyệt cho phép âm thanh
-        audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-        audioPlayer.play();
+        // Phát một đoạn âm thanh cực ngắn để trình duyệt mở khóa loa
+        const silence = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+        silence.play().catch(() => {});
     }
 
     socket.on('status', msg => document.getElementById('status').innerText = msg);
 
     socket.on('speak', (data) => {
-        if (!isActivated) return;
+        if (!audioReady) return;
         document.getElementById('log').innerText = `Đang đọc: ${data.user}`;
 
-        // Link Google TTS - Bỏ tham số crossOrigin để tránh lỗi bảo mật
         const text = data.text;
+        // Dùng Proxy trung gian để tránh lỗi CORS và chặn link
         const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
         
-        audioPlayer.src = googleUrl;
-        audioPlayer.play().catch(error => {
-            console.error("Vẫn lỗi:", error);
-            document.getElementById('log').innerText = "Lỗi âm thanh, thử click vào màn hình!";
+        const audio = new Audio();
+        audio.src = proxyUrl;
+
+        audio.play().catch(error => {
+            console.error("Vẫn gặp lỗi phát:", error);
+            document.getElementById('log').innerText = "Lỗi âm thanh, hãy thử click vào trang web!";
         });
     });
 </script>
