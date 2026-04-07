@@ -16,54 +16,53 @@ app.use(express.static('public'));
 // --- KẾT NỐI DATABASE ---
 const MONGODB_URI = "mongodb+srv://baoboi97:baoboi97@cluster0.skkajlz.mongodb.net/tiktok_tts?retryWrites=true&w=majority&appName=Cluster0";
 mongoose.connect(MONGODB_URI)
-    .then(() => console.log("✅ MongoDB đã thông suốt!"))
-    .catch(err => console.error("❌ Lỗi Database:", err));
+    .then(() => console.log("✅ MongoDB đã kết nối thành công!"))
+    .catch(err => console.error("❌ Lỗi kết nối Database:", err));
 
 const Config = mongoose.model('Config', { key: String, value: String });
 const BannedWord = mongoose.model('BannedWord', { word: String });
 
 // --- AI GROQ ---
-// Đảm bảo bạn đã thêm GROQ_API_KEY vào Environment Variables trên Render
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'NHẬP_KEY_CỦA_BẠN_NẾU_CHẠY_LOCAL' });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 let tiktokConn = null;
 
-// --- API HỆ THỐNG ---
+// --- CÁC ĐƯỜNG DẪN API QUẢN LÝ ---
 app.get('/api/config', async (req, res) => {
     try {
         const data = await Config.findOne({ key: 'prompt' });
         res.json(data || { value: "Bạn là chị Google hài hước. Trả lời dưới 10 từ." });
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/config', async (req, res) => {
     try {
         await Config.findOneAndUpdate({ key: 'prompt' }, { value: req.body.value }, { upsert: true });
         res.sendStatus(200);
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/words', async (req, res) => {
     try {
         const words = await BannedWord.find();
         res.json(words);
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/words', async (req, res) => {
     try {
         if (req.body.word) await BannedWord.create({ word: req.body.word.toLowerCase().trim() });
         res.sendStatus(200);
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/words/:id', async (req, res) => {
     try {
         await BannedWord.findByIdAndDelete(req.params.id);
         res.sendStatus(200);
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- LẤY AUDIO TỪ GOOGLE TẠI SERVER ---
+// --- HÀM TẢI AUDIO TỪ GOOGLE (BASE64) ---
 async function getGoogleAudio(text) {
     try {
         const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text.substring(0, 200))}&tl=vi&client=tw-ob`;
@@ -75,11 +74,10 @@ async function getGoogleAudio(text) {
     }
 }
 
-// --- SOCKET.IO & TIKTOK ---
+// --- XỬ LÝ SOCKET VÀ TIKTOK ---
 io.on('connection', (socket) => {
     socket.on('set-username', (username) => {
         if (tiktokConn) tiktokConn.disconnect();
-
         tiktokConn = new WebcastPushConnection(username, { processInitialData: false });
 
         tiktokConn.connect().then(() => {
@@ -90,15 +88,15 @@ io.on('connection', (socket) => {
 
         tiktokConn.on('chat', async (data) => {
             try {
-                // 1. Check từ cấm
+                // 1. Kiểm tra từ cấm
                 const banned = await BannedWord.find();
                 if (banned.some(b => data.comment.toLowerCase().includes(b.word))) return;
 
-                // 2. Lấy Prompt xưng hô
+                // 2. Lấy xưng hô đã dạy
                 const promptDoc = await Config.findOne({ key: 'prompt' });
                 const sysPrompt = promptDoc ? promptDoc.value : "Bạn là chị Google. Trả lời dưới 10 từ.";
 
-                // 3. Gọi AI Groq
+                // 3. Gọi AI Groq trả lời
                 const completion = await groq.chat.completions.create({
                     messages: [
                         { role: "system", content: sysPrompt },
@@ -117,7 +115,7 @@ io.on('connection', (socket) => {
                         audio: audio
                     });
                 }
-            } catch (err) { console.error("Lỗi xử lý chat:", err.message); }
+            } catch (err) { console.error("Lỗi xử lý tin nhắn:", err.message); }
         });
     });
 });
