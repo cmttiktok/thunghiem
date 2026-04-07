@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<body style="background:#000; color:#fff; text-align:center;">
+    <h1>Hệ thống Chị Google AI</h1>
+    <button onclick="start()" style="padding:20px;">NHẤN VÀO ĐÂY ĐỂ BẬT LOA</button>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        function start() { alert("Loa đã sẵn sàng!"); }
+        socket.on('speak', (data) => {
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(data.text)}&tl=vi&client=tw-ob`;
+            new Audio(url).play();
+        });
+    </script>
+</body>
+</html>
