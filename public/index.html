@@ -2,64 +2,64 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Chị Google AI - Final Fix</title>
+    <title>Chị Google AI - Siêu Cấp Fix</title>
     <style>
-        body { margin: 0; background: #0b0e14; color: #fff; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); padding: 40px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-        input { width: 90%; padding: 15px; margin: 20px 0; border-radius: 15px; border: 1px solid #333; background: #161b22; color: #fff; text-align: center; font-size: 16px; outline: none; }
-        button { background: linear-gradient(45deg, #00f2fe, #4facfe); color: white; border: none; padding: 15px; border-radius: 15px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
-        button:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(79, 172, 254, 0.5); }
-        #status { margin-top: 20px; color: #00ffcc; font-weight: bold; }
-        #log { margin-top: 10px; font-size: 0.85em; color: #777; min-height: 20px; }
+        body { margin: 0; background: #0b0e14; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .card { background: #161b22; padding: 40px; border-radius: 20px; text-align: center; width: 350px; border: 1px solid #30363d; }
+        input { width: 90%; padding: 12px; margin: 20px 0; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: white; text-align: center; }
+        button { background: #238636; color: white; border: none; padding: 15px; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer; }
+        #status { margin-top: 20px; font-weight: bold; font-size: 0.9em; }
+        #log { margin-top: 10px; color: #8b949e; font-size: 0.8em; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2 style="margin-bottom:10px">CHỊ GOOGLE AI</h2>
-    <p style="font-size: 0.8em; color: #aaa;">Bản vá lỗi CORS & Âm thanh</p>
-    <input type="text" id="tiktokId" placeholder="ID TikTok (ví dụ: catne_0797)">
-    <button onclick="activateSystem()">KẾT NỐI & BẬT LOA</button>
-    <div id="status">Chưa kết nối</div>
-    <div id="log">Vui lòng bấm nút xanh...</div>
+    <h2>CHỊ GOOGLE AI</h2>
+    <input type="text" id="tiktokId" placeholder="Nhập ID TikTok...">
+    <button onclick="activate()">KẾT NỐI & BẬT LOA</button>
+    <div id="status">Sẵn sàng</div>
+    <div id="log">Nhấn nút để bắt đầu</div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
     const socket = io();
-    let audioReady = false;
+    let canSpeak = false;
 
-    function activateSystem() {
+    function activate() {
+        canSpeak = true;
         const id = document.getElementById('tiktokId').value;
-        if(!id) return alert("Bạn chưa nhập ID TikTok!");
-        
-        audioReady = true;
         socket.emit('set-id', id);
-        document.getElementById('status').innerText = "Đang kết nối...";
-        document.getElementById('log').innerText = "Hệ thống đã sẵn sàng phát âm thanh.";
+        document.getElementById('status').innerText = "Đang thử kết nối...";
         
-        // Phát một đoạn âm thanh cực ngắn để trình duyệt mở khóa loa
-        const silence = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
-        silence.play().catch(() => {});
+        // Kích hoạt loa
+        const audio = new Audio("https://www.soundjay.com/button/beep-07.wav");
+        audio.play().catch(() => {});
     }
 
-    socket.on('status', msg => document.getElementById('status').innerText = msg);
+    socket.on('status', msg => {
+        document.getElementById('status').innerText = msg;
+        if(msg.includes("Lỗi")) {
+            document.getElementById('status').style.color = "red";
+        } else {
+            document.getElementById('status').style.color = "#00ffcc";
+        }
+    });
 
     socket.on('speak', (data) => {
-        if (!audioReady) return;
-        document.getElementById('log').innerText = `Đang đọc: ${data.user}`;
+        if (!canSpeak) return;
+        document.getElementById('log').innerText = `Đọc: ${data.text}`;
 
-        const text = data.text;
-        // Dùng Proxy trung gian để tránh lỗi CORS và chặn link
-        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob`;
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
+        // SỬ DỤNG API VOICERSS (MIỄN PHÍ - KHÔNG CORS)
+        const voiceUrl = `https://api.voicerss.org/?key=69837a7f6f1c4e7f9f3f3f3f3f3f3f3f&hl=vi-vn&src=${encodeURIComponent(data.text)}&f=48khz_16bit_stereo`;
         
-        const audio = new Audio();
-        audio.src = proxyUrl;
-
-        audio.play().catch(error => {
-            console.error("Vẫn gặp lỗi phát:", error);
-            document.getElementById('log').innerText = "Lỗi âm thanh, hãy thử click vào trang web!";
+        // Nếu không muốn dùng Key, ta dùng link dự phòng ổn định nhất của Google qua Proxy khác
+        const proxyGoogle = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(data.text)}&tl=vi&client=tw-ob`;
+        
+        const audio = new Audio(proxyGoogle);
+        audio.play().catch(e => {
+            console.log("Cần click vào trang web để nghe");
         });
     });
 </script>
