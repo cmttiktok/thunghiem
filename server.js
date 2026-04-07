@@ -5,7 +5,6 @@ const { WebcastPushConnection } = require('tiktok-live-connector');
 const axios = require('axios');
 const mongoose = require('mongoose');
 const path = require('path');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const server = http.createServer(app);
@@ -13,35 +12,30 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH GEMINI AI (KEY MỚI & FIX LỖI 404 V1BETA) ---
+// --- CẤU HÌNH API GOOGLE (GỌI TRỰC TIẾP KHÔNG DÙNG THƯ VIỆN) ---
 const API_KEY = "AIzaSyBmx-XHU_fBySeZw74O2BLFT_UBPWRJHk8";
-const genAI = new GoogleGenerativeAI(API_KEY);
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
 async function askGemini(userName, question) {
     try {
-        // QUAN TRỌNG: Ép sử dụng apiVersion 'v1' để tránh lỗi 404 Not Found
-        const model = genAI.getGenerativeModel(
-            { model: "gemini-1.5-flash" },
-            { apiVersion: 'v1' }
-        );
+        const payload = {
+            contents: [{
+                parts: [{ text: `Bạn là trợ lý ảo hài hước của TikToker Chi Bèo. Trả lời cực ngắn dưới 15 từ. ${userName} hỏi: ${question}` }]
+            }]
+        };
 
-        const prompt = `Bạn là trợ lý ảo hài hước của TikToker Chi Bèo. Trả lời thật ngắn gọn dưới 15 từ. Người dùng ${userName} hỏi: ${question}`;
-        
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text();
+        const response = await axios.post(GEMINI_URL, payload, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.data && response.data.candidates) {
+            return response.data.candidates[0].content.parts[0].text;
+        }
     } catch (e) {
-        console.error("LỖI AI CHI TIẾT:", e.message);
-        
-        // Danh sách câu trả lời dự phòng khi API gặp sự cố (mạng lag/vùng miền)
-        const backupReplies = [
-            "Dạ em nghe đây, anh nhắn gì thế ạ?",
-            "Hì hì, anh hỏi khó quá em chưa nghĩ ra.",
-            "Chào anh nhé, chúc anh xem live vui vẻ!",
-            "Em đây, em đây! Anh gọi Chi Bèo có việc gì không?"
-        ];
-        return backupReplies[Math.floor(Math.random() * backupReplies.length)];
+        console.error("LỖI API GOOGLE:", e.response ? e.response.data : e.message);
+        return "Em đây, em đây! Anh gọi Chi Bèo có việc gì không?";
     }
+    return "Dạ em nghe, anh nhắn gì thế ạ?";
 }
 
 // --- KẾT NỐI DATABASE ---
@@ -53,7 +47,7 @@ const Acronym = mongoose.model('Acronym', { key: String, value: String });
 const EmojiMap = mongoose.model('EmojiMap', { icon: String, text: String });
 const BotAnswer = mongoose.model('BotAnswer', { keyword: String, response: String });
 
-// --- CÁC HÀM XỬ LÝ VĂN BẢN ---
+// --- XỬ LÝ TEXT & AUDIO ---
 async function isBanned(text) {
     if (!text) return false;
     const banned = await BannedWord.find();
@@ -81,25 +75,16 @@ async function getGoogleAudio(text) {
     } catch (e) { return null; }
 }
 
-// --- ROUTING ---
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 let tiktok = null;
-let pkTimer = null;
 
 io.on('connection', (socket) => {
     socket.on('set-username', (username) => {
-        if (tiktok) {
-            tiktok.disconnect();
-            if (pkTimer) clearInterval(pkTimer);
-        }
-
+        if (tiktok) tiktok.disconnect();
         tiktok = new WebcastPushConnection(username);
-        tiktok.connect()
-            .then(() => socket.emit('status', `✅ Đã nối: ${username}`))
-            .catch(err => socket.emit('status', `❌ Lỗi kết nối: ${err.message}`));
+        tiktok.connect().then(() => socket.emit('status', `✅ Đã nối: ${username}`)).catch(err => socket.emit('status', `❌ Lỗi: ${err.message}`));
 
-        // XỬ LÝ CHAT
         tiktok.on('chat', async (data) => {
             if (await isBanned(data.nickname)) return;
             const commentLower = data.comment.toLowerCase();
@@ -125,34 +110,14 @@ io.on('connection', (socket) => {
             }
         });
 
-        // XỬ LÝ PK
-        tiktok.on('linkMicBattle', () => {
-            if (pkTimer) clearInterval(pkTimer);
-            let timeLeft = 300;
-            pkTimer = setInterval(async () => {
-                timeLeft--;
-                if (timeLeft === 20) {
-                    const audio = await getGoogleAudio("thả bông 20 giây cuối bèo ơi");
-                    socket.emit('audio-data', { type: 'pk', user: "HỆ THỐNG", comment: "NHẮC PK 20S", audio });
-                }
-                if (timeLeft <= 0) clearInterval(pkTimer);
-            }, 1000);
-        });
-
-        // CHÀO THÀNH VIÊN
         tiktok.on('member', async (data) => {
-            if (!(await isBanned(data.nickname))) {
-                const safeName = await processText(data.nickname);
-                const audio = await getGoogleAudio(`Bèo ơi, anh ${safeName} ghé chơi nè`);
-                socket.emit('audio-data', { type: 'welcome', user: "Hệ thống", comment: `${data.nickname} vào`, audio });
-            }
+            const audio = await getGoogleAudio(`Chào anh ${data.nickname} vào xem live`);
+            socket.emit('audio-data', { type: 'welcome', user: "Hệ thống", comment: `${data.nickname} vào`, audio });
         });
 
-        // QUÀ TẶNG
         tiktok.on('gift', async (data) => {
-            if (data.repeatEnd && !(await isBanned(data.nickname))) {
-                const safeName = await processText(data.nickname);
-                const audio = await getGoogleAudio(`Cảm ơn ${safeName} đã tặng ${data.giftName}`);
+            if (data.repeatEnd) {
+                const audio = await getGoogleAudio(`Cảm ơn ${data.nickname} tặng ${data.giftName}`);
                 socket.emit('audio-data', { type: 'gift', user: "QUÀ", comment: `${data.nickname} tặng ${data.giftName}`, audio });
             }
         });
@@ -160,4 +125,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`🚀 Server đang chạy tại port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
