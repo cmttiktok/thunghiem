@@ -12,24 +12,25 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH AI (HUGGING FACE) ---
-const HF_TOKEN = "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"; 
-const AI_MODEL = "HuggingFaceH4/zephyr-7b-beta"; 
+// --- CẤU HÌNH AI (LẤY TỪ ENVIRONMENT VARIABLE) ---
+const HF_TOKEN = process.env.HF_TOKEN; 
+const AI_MODEL = "facebook/blenderbot-400M-distill"; // Model này cực nhẹ và nhanh
 
 async function askAI(userName, question) {
+    if (!HF_TOKEN) return `Chào ${userName}, mình đang khởi động, đợi tí nha!`;
+    
     try {
         const response = await axios.post(
             `https://api-inference.huggingface.co/models/${AI_MODEL}`,
-            { 
-                inputs: `<|system|>\nBạn là trợ lý ảo của Chi Bèo. Trả lời cực ngắn dưới 15 từ.</s>\n<|user|>\n${userName} hỏi: ${question}</s>\n<|assistant|>\n`,
-                parameters: { max_new_tokens: 30 }
-            },
+            { inputs: `Chat với ${userName}: ${question}` },
             { headers: { Authorization: `Bearer ${HF_TOKEN}` }, timeout: 5000 }
         );
-        let text = Array.isArray(response.data) ? response.data[0].generated_text : response.data.generated_text;
-        return text.split("<|assistant|>\n")[1]?.trim() || "Em nghe đây ạ!";
+        
+        // Trả về câu trả lời từ AI
+        return response.data.generated_text || response.data[0].generated_text;
     } catch (e) {
-        return `Chào ${userName}, em nghe đây!`;
+        console.error("LỖI AI:", e.message);
+        return `Chào ${userName}, em nghe đây ạ!`;
     }
 }
 
@@ -48,28 +49,20 @@ async function getGoogleAudio(text) {
     } catch (e) { return null; }
 }
 
-// --- LOGIC TIKTOK (QUAN TRỌNG: ĐÃ SỬA ĐỂ HIỆN CMT) ---
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 let tiktok = null;
-
 io.on('connection', (socket) => {
     socket.on('set-username', (username) => {
         if (tiktok) tiktok.disconnect();
         tiktok = new WebcastPushConnection(username);
-        
-        tiktok.connect()
-            .then(() => socket.emit('status', `✅ Đã nối: ${username}`))
-            .catch(err => socket.emit('status', `❌ Lỗi: ${err.message}`));
+        tiktok.connect().then(() => socket.emit('status', `✅ Đã nối: ${username}`));
 
-        // LUÔN LUÔN ĐẨY COMMENT LÊN GIAO DIỆN
         tiktok.on('chat', async (data) => {
-            // 1. Gửi comment thô lên web ngay lập tức để màn hình nhảy chữ
+            // Hiển thị comment lên web ngay lập tức
             socket.emit('chat-message', data); 
 
             const commentLower = data.comment.toLowerCase();
-            
-            // 2. Kiểm tra kịch bản cứng
             const botRules = await BotAnswer.find();
             const match = botRules.find(r => commentLower.includes(r.keyword.toLowerCase()));
 
@@ -77,16 +70,10 @@ io.on('connection', (socket) => {
                 const audio = await getGoogleAudio(`Anh ${data.nickname} ơi, ${match.response}`);
                 socket.emit('audio-data', { type: 'bot', user: "TRỢ LÝ", comment: match.response, audio });
             } 
-            // 3. AI trả lời
             else if (commentLower.includes("bot ơi") || commentLower.includes("bèo ơi")) {
                 const aiReply = await askAI(data.nickname, data.comment);
                 const audio = await getGoogleAudio(aiReply);
                 socket.emit('audio-data', { type: 'bot', user: "AI", comment: aiReply, audio });
-            }
-            // 4. Đọc chat bình thường (Nếu Tùng Anh bật tính năng đọc chat trên web)
-            else {
-                const audio = await getGoogleAudio(`${data.nickname} nói: ${data.comment}`);
-                socket.emit('audio-data', { type: 'chat', user: data.nickname, comment: data.comment, audio });
             }
         });
 
@@ -94,15 +81,8 @@ io.on('connection', (socket) => {
             const audio = await getGoogleAudio(`Chào ${data.nickname} vào xem live`);
             socket.emit('audio-data', { type: 'welcome', user: "Hệ thống", comment: `${data.nickname} vào`, audio });
         });
-
-        tiktok.on('gift', async (data) => {
-            if (data.repeatEnd) {
-                const audio = await getGoogleAudio(`Cảm ơn ${data.nickname} đã tặng ${data.giftName}`);
-                socket.emit('audio-data', { type: 'gift', user: "QUÀ", comment: `${data.nickname} tặng ${data.giftName}`, audio });
-            }
-        });
     });
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`🚀 Bot hoạt động tại port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Sẵn sàng tại port ${PORT}`));
