@@ -12,10 +12,10 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH AI (MODEL ỔN ĐỊNH NHẤT) ---
+// --- CẤU HÌNH AI (MODEL MỚI CHỐNG LỖI 410) ---
 const HF_TOKEN = process.env.HF_TOKEN; 
-// Đổi sang model chuyên chat, cực kỳ ổn định
-const AI_MODEL = "HuggingFaceH4/zephyr-7b-beta"; 
+// Sử dụng model Mistral - cực kỳ ổn định và thông minh
+const AI_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"; 
 
 async function askAI(userName, question) {
     if (!HF_TOKEN) return `Chào ${userName}, em nghe đây ạ!`;
@@ -24,18 +24,17 @@ async function askAI(userName, question) {
         const response = await axios.post(
             `https://api-inference.huggingface.co/models/${AI_MODEL}`,
             { 
-                inputs: `<|system|>\nBạn là trợ lý ảo của Chi Bèo. Trả lời cực ngắn dưới 15 từ.</s>\n<|user|>\n${userName} hỏi: ${question}</s>\n<|assistant|>\n`,
-                parameters: { max_new_tokens: 50, temperature: 0.7 }
+                inputs: `<s>[INST] Bạn là trợ lý ảo vui vẻ của Chi Bèo. Trả lời ngắn gọn dưới 15 từ bằng tiếng Việt. Câu hỏi: ${question} [/INST]`,
+                parameters: { max_new_tokens: 50 }
             },
             { headers: { Authorization: `Bearer ${HF_TOKEN}` }, timeout: 8000 }
         );
         
-        let reply = response.data[0].generated_text.split("<|assistant|>\n")[1] || "Em nghe đây ạ!";
+        let reply = response.data[0].generated_text.split("[/INST]")[1] || "Em nghe đây ạ!";
         return reply.trim();
     } catch (e) {
         console.error("LỖI AI:", e.message);
-        // Trả về câu khác để bạn biết là đang bị lỗi kết nối
-        return `Dạ ${userName}, em đang suy nghĩ một chút, anh đợi em tí nhé!`;
+        return `Dạ ${userName}, em đang suy nghĩ tí nhé!`;
     }
 }
 
