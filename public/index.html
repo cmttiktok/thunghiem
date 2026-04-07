@@ -2,59 +2,152 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>CHỊ GOOGLE AI - LUXURY</title>
+    <title>CHỊ GOOGLE AI - DASHBOARD</title>
     <style>
-        body { margin: 0; background: #0f1020; color: #fff; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); padding: 40px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; width: 340px; }
-        input { width: 90%; padding: 15px; margin: 20px 0; border-radius: 12px; border: 1px solid #333; background: #1a1b2e; color: #fff; text-align: center; outline: none; }
-        button { background: linear-gradient(45deg, #00d2ff, #3a7bd5); color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; width: 100%; cursor: pointer; }
-        #status { margin-top: 20px; color: #00ffcc; font-weight: bold; }
-        #log-box { margin-top: 15px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 10px; font-size: 0.85em; max-height: 100px; overflow-y: auto; }
+        body { margin: 0; background: #0b0e14; color: #e6edf3; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Cột trái: 350px cố định */
+        .sidebar { width: 350px; background: #161b22; border-right: 1px solid #30363d; padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; box-sizing: border-box; }
+        
+        /* Cột phải: Tự động rộng ra */
+        .chat-area { flex: 1; padding: 20px; display: flex; flex-direction: column; background: #0d1117; box-sizing: border-box; }
+        
+        h3 { color: #58a6ff; margin: 0 0 10px 0; font-size: 1rem; border-bottom: 1px solid #30363d; padding-bottom: 5px; text-transform: uppercase; }
+        input, textarea { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: #fff; box-sizing: border-box; outline: none; }
+        button { width: 100%; padding: 12px; border-radius: 8px; border: none; background: #238636; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #2ea043; transform: translateY(-1px); }
+
+        .list-box { background: #0d1117; border-radius: 8px; padding: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #30363d; font-size: 0.9rem; }
+        .banned-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #21262d; }
+        .btn-del { color: #f85149; cursor: pointer; font-weight: bold; }
+
+        /* Khu vực Chat bên phải */
+        #chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-bottom: 20px; }
+        .msg-card { background: rgba(255, 255, 255, 0.03); padding: 15px; border-radius: 12px; border-left: 4px solid #58a6ff; animation: slideIn 0.3s ease; border: 1px solid rgba(255,255,255,0.05); }
+        .user-name { color: #f0883e; font-weight: bold; font-size: 0.9rem; margin-bottom: 5px; }
+        .user-cmt { color: #e6edf3; font-size: 1rem; }
+        .ai-reply { background: rgba(88, 166, 255, 0.1); padding: 10px; border-radius: 8px; margin-top: 10px; color: #7ee787; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+        .ai-reply::before { content: "🤖 Chị Google:"; font-weight: bold; color: #58a6ff; }
+
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2>CHỊ GOOGLE AI</h2>
-    <input type="text" id="tiktokId" placeholder="Nhập ID TikTok...">
-    <button onclick="start()">KẾT NỐI & MỞ LOA</button>
-    <div id="status">Sẵn sàng kết nối...</div>
-    <div id="log-box">Lịch sử trả lời sẽ hiện ở đây...</div>
-</div>
+    <div class="sidebar">
+        <div>
+            <h3>KẾT NỐI TIKTOK</h3>
+            <input type="text" id="tiktokId" placeholder="ID TikTok (vd: catne_0797)">
+            <button onclick="start()">KẾT NỐI & BẬT LOA</button>
+            <p id="stt" style="font-size: 0.8rem; text-align: center; color: #8b949e; margin-top: 10px;">Chưa kết nối</p>
+        </div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-    const socket = io();
-    let queue = [], isPlaying = false;
+        <div>
+            <h3>DẠY AI XƯNG HÔ</h3>
+            <textarea id="aiPrompt" rows="4" placeholder="Ví dụ: Bạn là chị Google hài hước. Hãy xưng là Chị và gọi người chat là Cưng. Trả lời ngắn gọn..."></textarea>
+            <button onclick="saveConfig()" style="background: #1f6feb;">LƯU CÁCH NÓI</button>
+        </div>
 
-    function start() {
-        const id = document.getElementById('tiktokId').value;
-        if(!id) return alert("Chưa nhập ID!");
-        socket.emit('set-username', id);
-        // Mẹo mở khóa âm thanh trình duyệt
-        new Audio().play().catch(() => {});
-    }
+        <div>
+            <h3>CHẶN TỪ CẤM</h3>
+            <div style="display:flex; gap: 5px;">
+                <input type="text" id="badWord" placeholder="Nhập từ cần chặn..." style="margin:0">
+                <button onclick="addWord()" style="width: 80px;">THÊM</button>
+            </div>
+            <div class="list-box" id="word-list" style="margin-top:10px"></div>
+        </div>
+    </div>
 
-    socket.on('status', m => document.getElementById('status').innerText = m);
+    <div class="chat-area">
+        <h3>LỊCH SỬ TRÒ CHUYỆN AI</h3>
+        <div id="chat-log">
+            </div>
+    </div>
 
-    socket.on('audio-data', (data) => {
-        const log = document.getElementById('log-box');
-        log.innerHTML = `<div><b>${data.user}:</b> ${data.reply}</div>` + log.innerHTML;
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let queue = [], isPlaying = false;
 
-        if (data.audio) {
-            queue.push(data.audio); // Đưa vào hàng đợi giống code Bèo
-            if (!isPlaying) playNext();
+        async function start() {
+            const id = document.getElementById('tiktokId').value;
+            if(!id) return alert("Vui lòng nhập ID TikTok!");
+            socket.emit('set-username', id);
+            // Kích hoạt âm thanh trình duyệt
+            const a = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+            a.play();
         }
-    });
 
-    function playNext() {
-        if (queue.length === 0) { isPlaying = false; return; }
-        isPlaying = true;
-        
-        const audio = new Audio(queue.shift()); // Lấy dữ liệu Base64 phát luôn
-        audio.onended = () => setTimeout(playNext, 500); 
-        audio.play().catch(() => playNext());
-    }
-</script>
+        socket.on('status', m => document.getElementById('stt').innerText = m);
+
+        socket.on('audio-data', d => {
+            const log = document.getElementById('chat-log');
+            const card = document.createElement('div');
+            card.className = 'msg-card';
+            card.innerHTML = `
+                <div class="user-name">${d.user} vừa bình luận:</div>
+                <div class="user-cmt">"${d.comment}"</div>
+                <div class="ai-reply">${d.reply}</div>
+            `;
+            log.prepend(card); // Hiện tin mới nhất lên trên cùng
+
+            if (d.audio) {
+                queue.push(d.audio);
+                if (!isPlaying) playNext();
+            }
+        });
+
+        function playNext() {
+            if (!queue.length) { isPlaying = false; return; }
+            isPlaying = true;
+            const a = new Audio(queue.shift());
+            a.onended = () => setTimeout(playNext, 400);
+            a.play().catch(() => playNext());
+        }
+
+        // --- HÀM QUẢN LÝ DỮ LIỆU ---
+        async function loadSettings() {
+            const config = await (await fetch('/api/config')).json();
+            if(config) document.getElementById('aiPrompt').value = config.value;
+
+            const words = await (await fetch('/api/words')).json();
+            document.getElementById('word-list').innerHTML = words.map(w => `
+                <div class="banned-item">
+                    <span>${w.word}</span>
+                    <span class="btn-del" onclick="delWord('${w._id}')">Xóa</span>
+                </div>
+            `).join('');
+        }
+
+        async function saveConfig() {
+            await fetch('/api/config', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ value: document.getElementById('aiPrompt').value }) 
+            });
+            alert("Đã lưu cách xưng hô!");
+        }
+
+        async function addWord() {
+            const word = document.getElementById('badWord').value;
+            if(!word) return;
+            await fetch('/api/words', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ word }) 
+            });
+            document.getElementById('badWord').value = '';
+            loadSettings();
+        }
+
+        async function delWord(id) {
+            if(confirm("Xóa từ này?")) {
+                await fetch(`/api/words/${id}`, { method: 'DELETE' });
+                loadSettings();
+            }
+        }
+
+        loadSettings();
+    </script>
 </body>
 </html>
