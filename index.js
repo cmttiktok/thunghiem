@@ -5,22 +5,23 @@ const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server);
 
+// Lấy API Key từ Environment Variable trên Render
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 let tiktokConn = null;
 
-// Hàm kết nối TikTok
+// Hàm khởi tạo kết nối TikTok
 function connectTikTok(username) {
     if (tiktokConn) {
-        tiktokConn.disconnect(); // Ngắt kết nối cũ nếu có
+        tiktokConn.disconnect();
     }
 
     tiktokConn = new WebcastPushConnection(username);
 
     tiktokConn.connect().then(state => {
-        io.emit('status', `Đã kết nối với: ${username}`);
-        console.log(`Connected to ${username}`);
+        io.emit('status', `✅ Đã kết nối với: ${username}`);
+        console.log(`Kết nối thành công: ${username}`);
     }).catch(err => {
-        io.emit('status', `Lỗi: ${err.message}`);
+        io.emit('status', `❌ Lỗi: ${err.message}`);
     });
 
     // Lắng nghe bình luận
@@ -28,20 +29,28 @@ function connectTikTok(username) {
         try {
             const completion = await groq.chat.completions.create({
                 messages: [
-                    { role: "system", content: "Bạn là trợ lý ảo Chị Google. Trả lời cực ngắn, hài hước, xưng chị gọi em." },
-                    { role: "user", content: `Bình luận từ ${data.uniqueId}: ${data.comment}` }
+                    { 
+                        role: "system", 
+                        content: "Bạn là Chị Google đang livestream. Hãy trả lời bình luận của người xem cực kỳ ngắn gọn (dưới 15 từ), hài hước, xưng chị gọi em." 
+                    },
+                    { role: "user", content: `Người dùng ${data.uniqueId} nói: ${data.comment}` }
                 ],
-                model: "llama-3.3-70b-versatile",
+                model: "llama-3.3-70b-versatile", // Model nhanh nhất của Groq
+                temperature: 0.7,
             });
+
             const reply = completion.choices[0]?.message?.content;
-            if (reply) io.emit('speak', { user: data.uniqueId, text: reply });
+            if (reply) {
+                console.log(`AI đáp: ${reply}`);
+                io.emit('speak', { user: data.uniqueId, text: reply });
+            }
         } catch (e) {
-            console.log("Lỗi AI");
+            console.error("Lỗi xử lý AI:", e.message);
         }
     });
 }
 
-// Nhận yêu cầu đổi ID từ giao diện
+// Nhận lệnh từ giao diện web
 io.on('connection', (socket) => {
     socket.on('set-id', (username) => {
         connectTikTok(username);
@@ -49,4 +58,5 @@ io.on('connection', (socket) => {
 });
 
 app.use(express.static('public'));
-server.listen(process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server chạy tại port ${PORT}`));
