@@ -12,31 +12,32 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH AI (DÙNG MODEL MISTRAL - KHÔNG LO LỖI 410) ---
+// --- CẤU HÌNH AI (DÙNG MODEL FACEBOOK - CỰC NHẸ) ---
 const HF_TOKEN = process.env.HF_TOKEN; 
-const AI_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"; 
+const AI_MODEL = "facebook/blenderbot-400M-distill"; 
 
 async function askAI(userName, question) {
-    // Nếu bạn chưa thêm HF_TOKEN vào Render, nó sẽ báo câu này
-    if (!HF_TOKEN) return `Chào ${userName}, em nghe đây ạ!`;
+    if (!HF_TOKEN) return `Chào ${userName}, em nghe đây!`;
     
     try {
         const response = await axios.post(
             `https://api-inference.huggingface.co/models/${AI_MODEL}`,
-            { 
-                inputs: `<s>[INST] Bạn là trợ lý ảo của Chi Bèo. Trả lời cực ngắn dưới 15 từ bằng tiếng Việt. Câu hỏi: ${question} [/INST]`,
-                parameters: { max_new_tokens: 50, temperature: 0.7 }
-            },
-            { headers: { Authorization: `Bearer ${HF_TOKEN}` }, timeout: 10000 }
+            { inputs: question },
+            { headers: { Authorization: `Bearer ${HF_TOKEN}` }, timeout: 5000 }
         );
         
-        // Lấy câu trả lời sau phần Instruct
-        let fullText = response.data[0].generated_text;
-        let reply = fullText.split("[/INST]")[1] || "Em nghe đây ạ!";
-        return reply.trim();
+        // Trả về kết quả từ AI
+        let reply = response.data.generated_text || response.data[0]?.generated_text || "Em nghe đây ạ!";
+        return reply.replace("BlenderBot", "Trợ lý").trim();
     } catch (e) {
-        console.error("LỖI AI:", e.message);
-        return `Dạ ${userName}, em đang load dữ liệu, đợi em tí nhé!`;
+        // Nếu AI lỗi, tự động trả lời theo phong cách vui vẻ
+        const backupReplies = [
+            `Dạ em nghe đây ${userName} ơi!`,
+            `Anh ${userName} gọi em có việc gì thế?`,
+            `Em đây, chúc anh ${userName} xem live vui vẻ nha!`,
+            `Đợi em tí nhé, em đang bận ăn bánh bèo rồi hihi`
+        ];
+        return backupReplies[Math.floor(Math.random() * backupReplies.length)];
     }
 }
 
@@ -65,7 +66,7 @@ io.on('connection', (socket) => {
         tiktok.connect().then(() => socket.emit('status', `✅ Đã nối: ${username}`));
 
         tiktok.on('chat', async (data) => {
-            socket.emit('chat-message', data); // Hiện chat ngay lập tức
+            socket.emit('chat-message', data); 
 
             const commentLower = data.comment.toLowerCase();
             const botRules = await BotAnswer.find();
@@ -90,4 +91,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`🚀 Bot của Tùng Anh đã sẵn sàng!`));
+server.listen(PORT, () => console.log(`🚀 Hệ thống đã sẵn sàng!`));
