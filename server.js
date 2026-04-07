@@ -12,34 +12,37 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 
-// --- CẤU HÌNH API GOOGLE (DÙNG V1BETA CHO GEMINI 1.5 FLASH) ---
+// --- CẤU HÌNH GOOGLE AI (GỌI TRỰC TIẾP QUA AXIOS) ---
 const API_KEY = "AIzaSyBmx-XHU_fBySeZw74O2BLFT_UBPWRJHk8";
-// LƯU Ý: Phải dùng v1beta thì model gemini-1.5-flash mới hoạt động
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+// Endpoint v1beta với model-latest là địa chỉ chuẩn nhất hiện nay
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`;
 
 async function askGemini(userName, question) {
     try {
-        const payload = {
+        const response = await axios.post(GEMINI_URL, {
             contents: [{
-                parts: [{ text: `Bạn là trợ lý ảo hài hước của TikToker Chi Bèo. Trả lời ngắn dưới 15 từ. ${userName} hỏi: ${question}` }]
+                parts: [{ text: `Bạn là trợ lý ảo hài hước của TikToker Chi Bèo. Trả lời cực ngắn dưới 15 từ. Đang nói chuyện với ${userName}. Câu hỏi: ${question}` }]
             }]
-        };
-
-        const response = await axios.post(GEMINI_URL, payload, {
-            headers: { 'Content-Type': 'application/json' }
+        }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 5000 // Không để live bị đợi quá lâu
         });
 
         if (response.data && response.data.candidates && response.data.candidates[0].content) {
             return response.data.candidates[0].content.parts[0].text;
         }
     } catch (e) {
-        console.error("LỖI API GOOGLE:", e.response ? JSON.stringify(e.response.data) : e.message);
-        return "Dạ máy chủ AI đang bảo trì vùng miền, anh hỏi lại sau nhé!";
+        // Log lỗi thật chi tiết để Tùng Anh nhìn thấy trong Render Log
+        console.error("LỖI GOOGLE API:", e.response ? JSON.stringify(e.response.data) : e.message);
+        
+        // Nếu lỗi, trả về một câu để bớt trống trải trên live
+        const backUp = ["Dạ em nghe đây!", "Hì hì, anh nhắn gì em chưa rõ ạ.", "Chào anh nhé, chúc anh xem live vui vẻ!"];
+        return backUp[Math.floor(Math.random() * backUp.length)];
     }
-    return "Dạ em nghe, anh nhắn gì thế ạ?";
+    return "Em đây ạ!";
 }
 
-// --- KẾT NỐI DATABASE ---
+// --- KẾT NỐI MONGODB ---
 const MONGODB_URI = "mongodb+srv://baoboi97:baoboi97@cluster0.skkajlz.mongodb.net/tiktok_tts?retryWrites=true&w=majority&appName=Cluster0";
 mongoose.connect(MONGODB_URI).then(() => console.log("✅ MongoDB Connected"));
 
@@ -48,7 +51,7 @@ const Acronym = mongoose.model('Acronym', { key: String, value: String });
 const EmojiMap = mongoose.model('EmojiMap', { icon: String, text: String });
 const BotAnswer = mongoose.model('BotAnswer', { keyword: String, response: String });
 
-// --- XỬ LÝ TEXT ---
+// --- XỬ LÝ VĂN BẢN ---
 async function isBanned(text) {
     if (!text) return false;
     const banned = await BannedWord.find();
@@ -76,6 +79,7 @@ async function getGoogleAudio(text) {
     } catch (e) { return null; }
 }
 
+// --- ROUTE & TIKTOK CONNECTOR ---
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 let tiktok = null;
@@ -84,6 +88,7 @@ io.on('connection', (socket) => {
     socket.on('set-username', (username) => {
         if (tiktok) tiktok.disconnect();
         tiktok = new WebcastPushConnection(username);
+        
         tiktok.connect()
             .then(() => socket.emit('status', `✅ Đã nối: ${username}`))
             .catch(err => socket.emit('status', `❌ Lỗi: ${err.message}`));
@@ -92,6 +97,7 @@ io.on('connection', (socket) => {
             if (await isBanned(data.nickname)) return;
             const commentLower = data.comment.toLowerCase();
 
+            // 1. Check database kịch bản cứng
             const botRules = await BotAnswer.find();
             const match = botRules.find(r => commentLower.includes(r.keyword));
 
@@ -99,11 +105,13 @@ io.on('connection', (socket) => {
                 const audio = await getGoogleAudio(`Anh ${data.nickname} ơi, ${match.response}`);
                 socket.emit('audio-data', { type: 'bot', user: "TRỢ LÝ", comment: match.response, audio });
             } 
+            // 2. Check gọi AI
             else if (commentLower.includes("bot ơi") || commentLower.includes("bèo ơi")) {
                 const aiReply = await askGemini(data.nickname, data.comment);
                 const audio = await getGoogleAudio(aiReply);
                 socket.emit('audio-data', { type: 'bot', user: "GEMINI AI", comment: aiReply, audio });
             }
+            // 3. Đọc chat bình thường
             else {
                 const final = await processText(data.comment);
                 if (final) {
@@ -113,14 +121,15 @@ io.on('connection', (socket) => {
             }
         });
 
+        // Chào khách & Tặng quà
         tiktok.on('member', async (data) => {
-            const audio = await getGoogleAudio(`Chào anh ${data.nickname} vào xem live`);
+            const audio = await getGoogleAudio(`Chào mừng anh ${data.nickname} ghé xem live`);
             socket.emit('audio-data', { type: 'welcome', user: "Hệ thống", comment: `${data.nickname} vào`, audio });
         });
 
         tiktok.on('gift', async (data) => {
             if (data.repeatEnd) {
-                const audio = await getGoogleAudio(`Cảm ơn ${data.nickname} tặng ${data.giftName}`);
+                const audio = await getGoogleAudio(`Cảm ơn ${data.nickname} đã tặng ${data.giftName}`);
                 socket.emit('audio-data', { type: 'gift', user: "QUÀ", comment: `${data.nickname} tặng ${data.giftName}`, audio });
             }
         });
