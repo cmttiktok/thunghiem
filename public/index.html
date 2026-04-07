@@ -2,81 +2,82 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Điều khiển Chị Google AI</title>
     <style>
         body {
-            margin: 0; padding: 0;
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            font-family: 'Segoe UI', sans-serif;
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh; color: white;
+            margin: 0; background: #121212; color: #fff;
+            font-family: 'Arial', sans-serif;
+            display: flex; justify-content: center; align-items: center; height: 100vh;
         }
-        .container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.37);
-            border: 1px solid rgba(255,255,255,0.1);
-            text-align: center; width: 350px;
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            padding: 40px; border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center; width: 320px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         input {
-            width: 80%; padding: 12px;
-            border-radius: 10px; border: none;
-            background: rgba(255,255,255,0.2);
-            color: white; outline: none;
-            margin-bottom: 20px; text-align: center;
+            width: 90%; padding: 12px; margin: 20px 0;
+            border-radius: 12px; border: none; background: #222; color: #fff;
+            text-align: center; outline: none; border: 1px solid #333;
         }
         button {
-            padding: 12px 30px; border-radius: 10px; border: none;
-            background: #00d2ff; color: white; font-weight: bold;
-            cursor: pointer; transition: 0.3s;
-            box-shadow: 0 0 15px #00d2ff;
+            background: #00e5ff; color: #000; border: none;
+            padding: 12px 24px; border-radius: 12px; font-weight: bold;
+            cursor: pointer; transition: 0.3s; box-shadow: 0 0 15px rgba(0,229,255,0.4);
         }
-        button:hover { transform: scale(1.05); box-shadow: 0 0 25px #00d2ff; }
-        #status { margin-top: 20px; font-size: 0.9em; color: #00ffcc; }
-        #log { font-size: 0.8em; margin-top: 10px; opacity: 0.7; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 0 25px #00e5ff; }
+        #status { margin-top: 20px; color: #00ffa3; font-weight: bold; }
+        #log { margin-top: 10px; font-size: 0.85em; color: #bbb; min-height: 1.2em; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Chị Google AI</h2>
-    <input type="text" id="tiktokId" placeholder="Nhập ID TikTok (ví dụ: thuychi2k)">
+<div class="card">
+    <h2 style="margin-top:0">Chị Google AI</h2>
+    <input type="text" id="tiktokId" placeholder="Nhập ID TikTok...">
     <br>
-    <button onclick="updateID()">KẾT NỐI LIVE</button>
+    <button onclick="startSystem()">KẾT NỐI LIVE</button>
     <div id="status">Chưa kết nối</div>
-    <div id="log">Vui lòng nhấn nút để kích hoạt loa</div>
+    <div id="log">Nhấn nút để bắt đầu</div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
     const socket = io();
-    let audioReady = false;
+    let isReady = false;
 
-    function updateID() {
+    function startSystem() {
         const id = document.getElementById('tiktokId').value;
-        if (!id) return alert("Vui lòng nhập ID!");
+        if(!id) return alert("Vui lòng nhập ID!");
         
-        audioReady = true; // Kích hoạt loa khi nhấn nút
+        isReady = true; // Cho phép phát âm thanh
         socket.emit('set-id', id);
         document.getElementById('status').innerText = "Đang kết nối...";
     }
 
-    socket.on('status', (msg) => {
-        document.getElementById('status').innerText = msg;
-    });
+    socket.on('status', msg => document.getElementById('status').innerText = msg);
 
     socket.on('speak', (data) => {
-        if (!audioReady) return;
+        if (!isReady) return;
         document.getElementById('log').innerText = `Đang trả lời: ${data.user}`;
+
+        const text = data.text;
+        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob`;
         
-        const text = `${data.text}`;
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob`;
-        
-        const audio = new Audio(url);
-        audio.play().catch(e => console.log("Lỗi âm thanh"));
+        const audio = new Audio(googleUrl);
+        audio.crossOrigin = "anonymous";
+
+        // Thử phát bằng Google TTS
+        audio.play().catch(error => {
+            console.warn("Google bị chặn, dùng giọng hệ thống dự phòng...");
+            
+            // DỰ PHÒNG: Dùng API có sẵn của trình duyệt nếu Google lỗi
+            const speech = new SpeechSynthesisUtterance(text);
+            speech.lang = 'vi-VN';
+            window.speechSynthesis.speak(speech);
+        });
     });
 </script>
 </body>
