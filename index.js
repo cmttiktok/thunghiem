@@ -5,58 +5,44 @@ const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server);
 
-// Lấy API Key từ Environment Variable trên Render
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 let tiktokConn = null;
 
-// Hàm khởi tạo kết nối TikTok
 function connectTikTok(username) {
-    if (tiktokConn) {
-        tiktokConn.disconnect();
-    }
+    if (tiktokConn) { tiktokConn.disconnect(); }
 
-    tiktokConn = new WebcastPushConnection(username);
-
-    tiktokConn.connect().then(state => {
-        io.emit('status', `✅ Đã kết nối với: ${username}`);
-        console.log(`Kết nối thành công: ${username}`);
-    }).catch(err => {
-        io.emit('status', `❌ Lỗi: ${err.message}`);
+    // Thêm các tùy chọn để tránh bị TikTok chặn
+    tiktokConn = new WebcastPushConnection(username, {
+        processDelayMS: 100,
+        enableExtendedGiftInfo: true
     });
 
-    // Lắng nghe bình luận
+    tiktokConn.connect().then(state => {
+        io.emit('status', `✅ Đã kết nối: ${username}`);
+    }).catch(err => {
+        // Nếu lỗi Websocket, hệ thống sẽ báo lại cho UI
+        io.emit('status', `❌ Lỗi kết nối: ${err.message}`);
+        console.error(err);
+    });
+
     tiktokConn.on('chat', async (data) => {
         try {
             const completion = await groq.chat.completions.create({
                 messages: [
-                    { 
-                        role: "system", 
-                        content: "Bạn là Chị Google đang livestream. Hãy trả lời bình luận của người xem cực kỳ ngắn gọn (dưới 15 từ), hài hước, xưng chị gọi em." 
-                    },
-                    { role: "user", content: `Người dùng ${data.uniqueId} nói: ${data.comment}` }
+                    { role: "system", content: "Bạn là chị Google hài hước. Trả lời dưới 10 chữ." },
+                    { role: "user", content: data.comment }
                 ],
-                model: "llama-3.3-70b-versatile", // Model nhanh nhất của Groq
-                temperature: 0.7,
+                model: "llama-3.3-70b-versatile",
             });
-
             const reply = completion.choices[0]?.message?.content;
-            if (reply) {
-                console.log(`AI đáp: ${reply}`);
-                io.emit('speak', { user: data.uniqueId, text: reply });
-            }
-        } catch (e) {
-            console.error("Lỗi xử lý AI:", e.message);
-        }
+            if (reply) io.emit('speak', { user: data.uniqueId, text: reply });
+        } catch (e) { console.log("Lỗi AI"); }
     });
 }
 
-// Nhận lệnh từ giao diện web
 io.on('connection', (socket) => {
-    socket.on('set-id', (username) => {
-        connectTikTok(username);
-    });
+    socket.on('set-id', (id) => connectTikTok(id));
 });
 
 app.use(express.static('public'));
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server chạy tại port ${PORT}`));
+server.listen(process.env.PORT || 3000);
