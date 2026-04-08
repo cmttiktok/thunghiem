@@ -91,7 +91,7 @@ io.on('connection', (socket) => {
                             content: `Người dùng có tên là "${data.nickname}" vừa bình luận: ${data.comment}. Hãy trả lời họ.` 
                         }
                     ],
-                    model: "llama3-8b-8192",
+                    model: "llama-3.3-70b-versatile",
                     temperature: 0.7
                 });
 
