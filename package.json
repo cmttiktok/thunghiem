@@ -1,7 +1,7 @@
 {
   "name": "tiktok-tts-mina-gemini",
-  "version": "2.0.0",
-  "description": "TikTok Live Assistant using Google Gemini AI",
+  "version": "2.1.0",
+  "description": "TikTok Assistant using Gemini AI",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
