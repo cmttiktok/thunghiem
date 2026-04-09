@@ -1,7 +1,7 @@
 {
-  "name": "tiktok-mina-groq-multi-key",
-  "version": "3.0.0",
-  "description": "TikTok Assistant with Multi-Key Groq",
+  "name": "tiktok-mina-multi-key",
+  "version": "3.1.0",
+  "description": "Mina Assistant with 5 Groq Keys",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
