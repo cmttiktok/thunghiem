@@ -2,14 +2,15 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>BÈO CONTROL - TÙNG ANH</title>
+    <title>BÈO CONTROL V2 - TÙNG ANH</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #0f172a; color: white; height: 100vh; overflow: hidden; font-family: sans-serif; }
         .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; height: 100%; }
         .scroll { height: calc(100vh - 100px); overflow-y: auto; }
         .chat-card { background: rgba(255,255,255,0.03); border-left: 4px solid #00d2ff; margin-bottom: 10px; padding: 10px; border-radius: 8px; }
-        .btn-sm-custom { font-size: 10px; padding: 2px 5px; }
+        .badge-tag { cursor: pointer; margin-right: 5px; background: #1e293b; border: 1px solid #334155; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+        .badge-tag:hover { background: #ef4444; }
     </style>
 </head>
 <body>
@@ -17,29 +18,36 @@
     <div class="row h-100">
         <div class="col-md-4">
             <div class="glass">
-                <h6>KẾT NỐI TIKTOK</h6>
+                <h6 class="text-primary">KẾT NỐI TIKTOK</h6>
                 <input type="text" id="user" class="form-control form-control-sm bg-dark text-white mb-2" placeholder="ID TikTok...">
                 <button onclick="connect()" class="btn btn-primary btn-sm w-100 mb-2">KẾT NỐI</button>
                 <div id="stt" class="small text-success mb-2">Chưa kết nối</div>
 
                 <label class="small">Tốc độ giọng nói: <span id="spdVal">1.0</span>x</label>
-                <input type="range" id="spd" min="0.5" max="2.0" step="0.1" value="1.0" class="form-range mb-2">
+                <input type="range" id="spd" min="0.5" max="2.0" step="0.1" value="1.0" class="form-range mb-3">
 
-                <h6>DẠY AI XƯNG HÔ</h6>
-                <textarea id="prompt" class="form-control form-control-sm bg-dark text-white mb-2" rows="4"></textarea>
-                <button onclick="saveConfig('prompt')" class="btn btn-warning btn-sm w-100 mb-2">LƯU XƯNG HÔ</button>
+                <h6 class="text-info">TỪ KHÓA GỌI MINA</h6>
+                <div class="d-flex gap-1 mb-2">
+                    <input type="text" id="newTrigger" class="form-control form-control-sm bg-dark text-white" placeholder="Ví dụ: mina">
+                    <button onclick="addTrigger()" class="btn btn-info btn-sm">THÊM</button>
+                </div>
+                <div id="triggerList" class="mb-3 d-flex flex-wrap gap-1"></div>
 
-                <h6>TỪ CẤM</h6>
+                <h6 class="text-warning">DẠY XƯNG HÔ</h6>
+                <textarea id="prompt" class="form-control form-control-sm bg-dark text-white mb-2" rows="3"></textarea>
+                <button onclick="saveConfig('prompt')" class="btn btn-warning btn-sm w-100 mb-3">LƯU CẤU HÌNH</button>
+
+                <h6 class="text-danger">TỪ CẤM (BANNED)</h6>
                 <div class="d-flex gap-1 mb-2">
                     <input type="text" id="badWord" class="form-control form-control-sm bg-dark text-white" placeholder="Từ cấm...">
-                    <button onclick="addBanned()" class="btn btn-danger btn-sm">THÊM</button>
+                    <button onclick="addBanned()" class="btn btn-danger btn-sm">CHẶN</button>
                 </div>
-                <div id="wordList" class="small text-secondary" style="height: 50px; overflow-y: auto;"></div>
+                <div id="wordList" class="small text-secondary" style="height: 40px; overflow-y: auto;"></div>
             </div>
         </div>
         <div class="col-md-8">
             <div class="glass">
-                <h6>LỊCH SỬ TƯƠNG TÁC</h6>
+                <h6>LỊCH SỬ TƯƠNG TÁC (Chỉ hiện khi gọi tên)</h6>
                 <div id="history" class="scroll"></div>
             </div>
         </div>
@@ -50,28 +58,45 @@
 <script>
     const socket = io();
     
-    // Tải dữ liệu cũ
+    // Tải dữ liệu ban đầu
     fetch('/api/config/prompt').then(r => r.json()).then(d => document.getElementById('prompt').value = d.value);
+    loadTriggers();
     loadBanned();
 
     function connect() { socket.emit('set-username', document.getElementById('user').value); }
     
+    // Quản lý từ khóa gọi Mina
+    function addTrigger() {
+        const word = document.getElementById('newTrigger').value;
+        if(!word) return;
+        fetch('/api/triggers', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({word}) })
+        .then(() => { document.getElementById('newTrigger').value = ''; loadTriggers(); });
+    }
+
+    function loadTriggers() {
+        fetch('/api/triggers').then(r => r.json()).then(data => {
+            const container = document.getElementById('triggerList');
+            container.innerHTML = data.map(t => `<span class="badge-tag" onclick="deleteTrigger('${t._id}')">${t.word} ×</span>`).join('');
+        });
+    }
+
+    function deleteTrigger(id) {
+        fetch(`/api/triggers/${id}`, { method: 'DELETE' }).then(() => loadTriggers());
+    }
+
+    // Các hàm cũ giữ nguyên
     function saveConfig(key) {
         const value = document.getElementById(key).value;
-        fetch('/api/config', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key, value}) })
-        .then(() => alert("Đã lưu!"));
+        fetch('/api/config', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key, value}) }).then(() => alert("Đã lưu!"));
     }
 
     function addBanned() {
         const word = document.getElementById('badWord').value;
-        fetch('/api/banned-words', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({word}) })
-        .then(() => { document.getElementById('badWord').value = ''; loadBanned(); });
+        fetch('/api/banned-words', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({word}) }).then(() => { document.getElementById('badWord').value = ''; loadBanned(); });
     }
 
     function loadBanned() {
-        fetch('/api/banned-words').then(r => r.json()).then(data => {
-            document.getElementById('wordList').innerText = "Cấm: " + data.map(w => w.word).join(', ');
-        });
+        fetch('/api/banned-words').then(r => r.json()).then(data => { document.getElementById('wordList').innerText = "Cấm: " + data.map(w => w.word).join(', '); });
     }
 
     document.getElementById('spd').oninput = function() {
@@ -80,10 +105,9 @@
     };
 
     function teach(question) {
-        const answer = prompt(`Dạy Mina trả lời câu "${question}":`);
+        const answer = prompt(`Dạy Mina trả lời "${question}":`);
         if (answer) {
-            fetch('/api/save-reply', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question, answer}) })
-            .then(() => alert("Đã dạy xong!"));
+            fetch('/api/save-reply', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question, answer}) }).then(() => alert("Đã dạy xong!"));
         }
     }
 
@@ -92,7 +116,7 @@
         div.className = 'chat-card';
         div.innerHTML = `<div class="small text-info">👤 ${data.user}</div><div>💬 ${data.comment}</div>
                         <div class="text-warning">🤖 Mina: ${data.reply}</div>
-                        <button onclick="teach('${data.comment}')" class="btn btn-outline-light btn-sm-custom mt-1">Sửa câu này</button>`;
+                        <button onclick="teach('${data.comment}')" class="btn btn-outline-light btn-sm mt-1" style="font-size:9px">Sửa câu này</button>`;
         document.getElementById('history').prepend(div);
         const audio = new Audio(data.audio);
         audio.playbackRate = data.speed || 1.0;
