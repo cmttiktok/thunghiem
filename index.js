@@ -13,40 +13,49 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.json());
 app.use(express.static('public'));
 
-// --- KẾT NỐI DATABASE ---
+// --- DATABASE ---
 const MONGODB_URI = "mongodb+srv://baoboi97:baoboi97@cluster0.skkajlz.mongodb.net/tiktok_tts?retryWrites=true&w=majority&appName=Cluster0";
-mongoose.connect(MONGODB_URI).then(() => console.log("✅ MongoDB Sẵn Sàng"));
+mongoose.connect(MONGODB_URI).then(() => console.log("✅ MongoDB Connected"));
 
 const Config = mongoose.model('Config', { key: String, value: String });
 const BannedWord = mongoose.model('BannedWord', { word: String });
 const CustomReply = mongoose.model('CustomReply', { userQuestion: String, aiResponse: String });
+const TriggerWord = mongoose.model('TriggerWord', { word: String }); // Model mới cho từ khóa gọi tên
 
-// --- CẤU HÌNH API ---
-const API_KEYS = [process.env.GROQ_KEY_1, process.env.GROQ_KEY_2, process.env.GROQ_KEY_3, process.env.GROQ_KEY_4, process.env.GROQ_KEY_5].filter(k => k);
-let currentKeyIndex = 0;
+// --- API QUẢN LÝ TỪ KHÓA GỌI MINA ---
+app.post('/api/triggers', async (req, res) => {
+    await TriggerWord.create({ word: req.body.word.toLowerCase().trim() });
+    res.json({ success: true });
+});
 
-// API lưu Prompt & Từ cấm
+app.get('/api/triggers', async (req, res) => {
+    const words = await TriggerWord.find();
+    res.json(words);
+});
+
+app.delete('/api/triggers/:id', async (req, res) => {
+    await TriggerWord.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+});
+
+// Các API cũ giữ nguyên...
 app.post('/api/config', async (req, res) => {
     const { key, value } = req.body;
     await Config.findOneAndUpdate({ key }, { value }, { upsert: true });
     res.json({ success: true });
 });
-
 app.get('/api/config/:key', async (req, res) => {
     const doc = await Config.findOne({ key: req.params.key });
     res.json({ value: doc ? doc.value : "" });
 });
-
 app.post('/api/banned-words', async (req, res) => {
     await BannedWord.create({ word: req.body.word.toLowerCase() });
     res.json({ success: true });
 });
-
 app.get('/api/banned-words', async (req, res) => {
     const words = await BannedWord.find();
     res.json(words);
 });
-
 app.post('/api/save-reply', async (req, res) => {
     const { question, answer } = req.body;
     const q = question.toLowerCase().trim();
@@ -63,6 +72,10 @@ async function getGoogleAudio(text) {
     } catch (e) { return null; }
 }
 
+// --- LOGIC XỬ LÝ CHAT ---
+const API_KEYS = [process.env.GROQ_KEY_1, process.env.GROQ_KEY_2, process.env.GROQ_KEY_3, process.env.GROQ_KEY_4, process.env.GROQ_KEY_5].filter(k => k);
+let currentKeyIndex = 0;
+
 io.on('connection', (socket) => {
     let tiktok;
     let voiceSpeed = 1.0;
@@ -72,31 +85,39 @@ io.on('connection', (socket) => {
     socket.on('set-username', (username) => {
         if (tiktok) tiktok.disconnect();
         tiktok = new WebcastPushConnection(username, { processInitialData: false });
-        tiktok.connect().then(() => socket.emit('status', `✅ Kết nối: ${username}`))
+        tiktok.connect().then(() => socket.emit('status', `✅ Đã kết nối: ${username}`))
               .catch(err => socket.emit('status', `❌ Lỗi: ${err.message}`));
 
         tiktok.on('chat', async (data) => {
             try {
+                const msgLower = data.comment.toLowerCase();
+
+                // 1. Kiểm tra Từ khóa gọi Mina
+                const triggers = await TriggerWord.find();
+                const isCalled = triggers.some(t => msgLower.includes(t.word));
+                if (triggers.length > 0 && !isCalled) return; // Nếu danh sách từ khóa không trống và không được gọi -> Bỏ qua
+
+                // 2. Kiểm tra Từ cấm
                 const banned = await BannedWord.find();
-                if (banned.some(b => data.comment.toLowerCase().includes(b.word))) return;
+                if (banned.some(b => msgLower.includes(b.word))) return;
 
-                const userMsg = data.comment.toLowerCase().trim();
-                const learned = await CustomReply.findOne({ userQuestion: userMsg });
-
+                const learned = await CustomReply.findOne({ userQuestion: msgLower.trim() });
                 let reply = "";
+
                 if (learned) {
                     reply = learned.aiResponse;
                 } else {
                     const promptDoc = await Config.findOne({ key: 'prompt' });
-                    const sysPrompt = promptDoc ? promptDoc.value : "Bạn là Mina.";
+                    const sysPrompt = (promptDoc ? promptDoc.value : "") + " QUY TẮC: Trả lời cực ngắn dưới 7 từ.";
+                    
                     const callGroq = async (retryCount = 0) => {
                         try {
                             const groq = new Groq({ apiKey: API_KEYS[currentKeyIndex] });
                             const completion = await groq.chat.completions.create({
                                 messages: [{ role: "system", content: sysPrompt }, { role: "user", content: `Tên: ${data.nickname}. Chat: ${data.comment}` }],
                                 model: "llama-3.1-8b-instant",
-                                max_tokens: 40,
-                                temperature: 0.8
+                                max_tokens: 35,
+                                temperature: 0.7
                             });
                             return completion.choices[0]?.message?.content;
                         } catch (err) {
@@ -120,4 +141,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`🚀 Port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Mina Online on Port ${PORT}`));
