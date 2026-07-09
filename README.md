@@ -1,2 +1,0 @@
-# thunghiem
-cmt tiktok
